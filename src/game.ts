@@ -67,7 +67,7 @@ export class GameWorld {
 
     animating = false;
     stopped = false;
-    animSpeed = 180;
+    animSpeed = 250;
     waterTime = 0;
 
     constructor(canvas: HTMLCanvasElement) {

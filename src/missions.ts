@@ -287,7 +287,7 @@ while nav.fuel() > 0:
         fuel: 200,
         fog: true,
         randomReefs: 10,
-        randomFish: 15,
+        randomFish: 25,
         objectives: [
             { id: "use_func", check: (_boat, _start, code) => /^\s*def\s+\w+\s*\(/m.test(code) },
             { id: "use_scan", check: (_boat, _start, code) => /sensor\.scan\s*\(|sensor\.forward\s*\(/.test(code) },
@@ -371,39 +371,73 @@ leg_turns = 0
 def search_fish():
     global straight_steps, leg, leg_turns
     m = sensor.scan()
-    # Check adjacent cells for fish
-    if m[1][2] == "fish":
-        control.forward(1)
-        control.collect()
+
+    # Search entire 5x5 for fish, find nearest
+    best = None
+    best_dist = 99
+    for r in range(5):
+        for c in range(5):
+            if m[r][c] == "fish":
+                d = abs(r - 2) + abs(c - 2)
+                if d < best_dist:
+                    best_dist = d
+                    best = (r, c)
+
+    if best is not None:
+        r, c = best
+        # Determine direction to fish
+        # Row < 2 means ahead, row > 2 means behind
+        # Col > 2 means starboard, col < 2 means port
+        if r < 2 and c == 2:
+            # Directly ahead
+            control.forward(1)
+            if m[1][2] == "fish" and r == 1:
+                control.collect()
+        else:
+            if r == 2 and c > 2:
+                # Starboard
+                control.turn_right()
+                control.forward(1)
+                if best_dist == 1:
+                    control.collect()
+            else:
+                if r == 2 and c < 2:
+                    # Port
+                    control.turn_left()
+                    control.forward(1)
+                    if best_dist == 1:
+                        control.collect()
+                else:
+                    if r < 2 and c > 2:
+                        # Ahead-starboard: go ahead first
+                        control.forward(1)
+                    else:
+                        if r < 2 and c < 2:
+                            # Ahead-port: go ahead first
+                            control.forward(1)
+                        else:
+                            if r > 2:
+                                # Behind: turn around
+                                control.turn_right()
+                                control.turn_right()
+                                control.forward(1)
         straight_steps = 0
     else:
-        if m[2][3] == "fish":
+        # No fish in sonar. Do spiral search
+        if straight_steps >= leg:
             control.turn_right()
-            control.forward(1)
-            control.collect()
             straight_steps = 0
+            leg_turns = leg_turns + 1
+            if leg_turns >= 2:
+                leg = leg + 2
+                leg_turns = 0
         else:
-            if m[2][1] == "fish":
-                control.turn_left()
+            if m[1][2] != "reef" and m[1][2] != "land":
                 control.forward(1)
-                control.collect()
-                straight_steps = 0
+                straight_steps = straight_steps + 1
             else:
-                # Spiral pattern: advance leg, turn, grow
-                if straight_steps >= leg:
-                    control.turn_right()
-                    straight_steps = 0
-                    leg_turns = leg_turns + 1
-                    if leg_turns >= 2:
-                        leg = leg + 2
-                        leg_turns = 0
-                else:
-                    if m[1][2] != "reef" and m[1][2] != "land":
-                        control.forward(1)
-                        straight_steps = straight_steps + 1
-                    else:
-                        control.turn_right()
-                        straight_steps = 0
+                control.turn_right()
+                straight_steps = 0
 
 while nav.fuel() > 0:
     if nav.cargo() < 3:

@@ -43,7 +43,7 @@ export default function App() {
   const [variables, setVariables] = useState<Record<string, any>>({});
   const [running, setRunning] = useState(false);
   const [code, setCode] = useState(MISSIONS[0].starterCode);
-  const [speed, setSpeed] = useState(180);
+  const [speed, setSpeed] = useState(250);
   const [showMissionModal, setShowMissionModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
@@ -198,6 +198,9 @@ export default function App() {
     setupMissionWorld(mission);
     renderObjectives(currentMissionIdx);
 
+    // Snapshot the map so replay uses the same layout
+    const mapSnapshot = world.map.map(row => [...row]);
+
     setRunning(true);
     world.animating = true;
 
@@ -219,7 +222,10 @@ export default function App() {
     }
 
     if (result.actions.length > 0) {
-      setupMissionWorld(mission);
+      // Restore the same map (don't re-randomize)
+      world.map = mapSnapshot;
+      world.reset(mission.startPos, mission.startDir, mission.fuel);
+      if (mission.fog) world.setFog(true);
       const animSpeed = 550 - speed;
 
       // Check objectives after each step; stop early if all pass
