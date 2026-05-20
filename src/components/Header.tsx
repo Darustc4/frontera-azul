@@ -1,4 +1,4 @@
-import { Anchor, ClipboardList, Globe } from 'lucide-react';
+import { Anchor, ClipboardList, Code, Globe } from 'lucide-react';
 import { useI18n } from '../i18n';
 
 interface HeaderProps {
@@ -32,6 +32,16 @@ export function Header({ missionLabel, onMissionsClick }: HeaderProps) {
           <Globe className="w-4 h-4" />
           {locale === 'es' ? 'EN' : 'ES'}
         </button>
+        <a
+          href="https://github.com/Darustc4/frontera-azul"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded bg-bg-panel text-text text-sm hover:bg-border hover:border-accent transition-colors"
+          title="Source code (AGPL-3.0)"
+        >
+          <Code className="w-4 h-4" />
+          {locale === 'es' ? 'Fuente' : 'Source'}
+        </a>
         <button
           onClick={onMissionsClick}
           className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded bg-bg-panel text-text text-sm hover:bg-border hover:border-accent transition-colors cursor-pointer"
