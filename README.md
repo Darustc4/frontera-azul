@@ -85,24 +85,24 @@ The dev server starts at `http://localhost:5173`. Pyodide is loaded from CDN on 
 
 ```
 src/
-├── main.tsx              # Entry point
-├── App.tsx               # Main app state & orchestration
-├── game.ts              # Game world: map generation, rendering, boat state
-├── python-executor.ts   # Pyodide bridge: runs student code, exposes API
-├── missions.ts          # Mission definitions (objectives, starter code, params)
-├── events.ts            # Event bus for decoupled communication
-├── i18n.tsx             # Internationalization (es/en)
-├── index.css            # Global styles
+├── main.tsx                # Entry point
+├── App.tsx                 # Main app state & orchestration
+├── game.ts                 # Game world: map generation, rendering, boat state
+├── python-executor.ts      # Pyodide bridge: runs student code, exposes API
+├── missions.ts             # Mission definitions (objectives, starter code, params)
+├── events.ts               # Event bus for decoupled communication
+├── i18n.tsx                # Internationalization (es/en)
+├── index.css               # Global styles
 └── components/
-    ├── Header.tsx        # Top bar with mission selector
-    ├── WorldPanel.tsx    # Canvas viewport, fuel/cargo gauges, objectives
-    ├── EditorPanel.tsx   # Code editor, console, sensor view, reference
-    ├── MissionModal.tsx  # Mission briefing dialog
+    ├── Header.tsx          # Top bar with mission selector
+    ├── WorldPanel.tsx      # Canvas viewport, fuel/cargo gauges, objectives
+    ├── EditorPanel.tsx     # Code editor, console, sensor view, reference
+    ├── MissionModal.tsx    # Mission briefing dialog
     ├── MissionsSidebar.tsx # Mission list with progress
-    └── SuccessModal.tsx  # Completion celebration
+    └── SuccessModal.tsx    # Completion celebration
 tests/
-├── game.test.ts         # Game logic unit tests
-└── executor.test.mts    # Python executor integration tests
+├── game.test.ts            # Game logic unit tests
+└── executor.test.mts       # Python executor integration tests
 ```
 
 ## Game World
@@ -120,13 +120,13 @@ Missions are defined in `src/missions.ts`. Each mission specifies:
 ```typescript
 {
   id: number,
-  startPos: { x, y },       // Boat starting position
+  startPos: { x, y },        // Boat starting position
   startDir: number,          // Initial heading (0-3)
   fuel: number,              // Fuel budget
   fog: boolean,              // Enable fog of war
   randomReefs: number,       // Random reef count
   randomFish: number,        // Random fish count
-  fixedReefs?: { x, y }[],  // Deterministic reef positions
+  fixedReefs?: { x, y }[],   // Deterministic reef positions
   objectives: Objective[],   // Win conditions
   starterCode: string,       // Pre-filled editor code
   unlocks: number[],         // Mission IDs unlocked on completion
@@ -134,6 +134,28 @@ Missions are defined in `src/missions.ts`. Each mission specifies:
 ```
 
 Objectives can check boat state, code patterns, or world conditions.
+
+## Planned Development
+
+### More Maps & Missions
+
+Additional lake maps with different shapes, currents, and shallow zones. Expanded mission progression covering more advanced algorithms (A\* pathfinding, BFS grid search, dynamic programming).
+
+### Data Science & AI
+
+Sonar readings return rich fish data such as estimated shape, size, depth, and echo signature. Students write classifiers to decide whether to harvest or release each fish based on species identification. Teaches feature extraction, decision trees, and basic ML concepts without leaving the Python environment.
+
+### Image & Audio Processing
+
+Underwater survey missions where the boat deploys a probe that returns pixel grids (depth maps) or waveform arrays (sonar pings). Students process these with numpy/scipy to reconstruct terrain profiles, detect anomalies, or locate sunken objects. Introduces signal processing and array manipulation in a concrete context.
+
+### Inventory, Multiple Boats & Commerce Routes
+
+Expand the economy layer: manage a fleet of boats with different cargo capacities, fuel costs, and speed profiles. Plan optimized trade routes between ports with fluctuating supply and demand. Teaches optimization, graph algorithms, and resource scheduling.
+
+### Web Hosting & OAuth2 Progress Saving
+
+Deploy to a public URL with persistent accounts. Students log in via OAuth2 (GitHub, Google) to save mission completion, code history, and unlocked content across devices. Backend stores progress server-side so nothing is lost when clearing browser storage.
 
 ## License
 
