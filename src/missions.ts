@@ -88,8 +88,8 @@ avanzar(5)
         id: 3,
         title: "Patrón de Búsqueda",
         subtitle: "Usa bucles para cubrir área",
-        briefing: `Señal de emergencia recibida. Cubre una zona amplia con un patrón de búsqueda.<br><br>Usa <code>repetir(n):</code> para no repetir código. El barco debe recorrer al menos 20 casillas.`,
-        hint: "Un zigzag: avanzar, girar, avanzar 1, girar de vuelta, avanzar. Repítelo con un bucle.",
+        briefing: `Señal de emergencia recibida. Cubre una zona amplia con un patrón de búsqueda.<br><br>Usa <code>for i in range(n):</code> para no repetir código. El barco debe recorrer al menos 20 casillas.`,
+        hint: "Un zigzag: avanzar, girar, avanzar 1, girar de vuelta, avanzar. Repítelo con un bucle for.",
         startPos: { x: 25, y: 35 },
         startDir: 1,
         fuel: 100,
@@ -97,14 +97,14 @@ avanzar(5)
         randomReefs: 0,
         randomFish: 0,
         objectives: [
-            { id: "use_loop", text: "Usa un bucle (repetir o for)", check: (_boat, _start, code) => /repetir|for\s+\w+\s+in\s+range/.test(code) },
+            { id: "use_loop", text: "Usa un bucle (for o while)", check: (_boat, _start, code) => /for\s+\w+\s+in\s+range|while\s+/.test(code) },
             { id: "cover_20", text: "Recorre al menos 20 casillas", check: (boat) => boat.trail.length >= 20 }
         ],
         starterCode: `# MISIÓN 3: Patrón de Búsqueda
 # Empieza mirando al ESTE.
 # Programa un zigzag con bucles.
 
-repetir(5):
+for i in range(5):
     avanzar(3)
     girar_izquierda()
     avanzar(1)
@@ -124,8 +124,8 @@ repetir(5):
         briefing: `Hay arrecifes en tu camino y necesitas esquivarlos. El barco tiene un sensor: <code>sensor_adelante()</code> devuelve lo que hay una casilla adelante (<code>"agua"</code>, <code>"arrecife"</code>, <code>"tierra"</code>, <code>"puerto"</code>).<br><br>Usa <code>if</code> para tomar decisiones:<br><pre style="background:#0a1929;padding:8px;border-radius:4px;font-size:0.8rem">if sensor_adelante() == "arrecife":
     girar_derecha()
 else:
-    avanzar(1)</pre>Combínalo con <code>repetir mientras</code> para avanzar hasta el final del camino.`,
-        hint: "Con 'repetir mientras combustible() > 0:' puedes repetir. Dentro, comprueba si hay arrecife adelante: si sí, gira; si no, avanza.",
+    avanzar(1)</pre>Combínalo con <code>while combustible() > 0:</code> para avanzar hasta el final del camino.`,
+        hint: "Con 'while combustible() > 0:' puedes repetir. Dentro, comprueba si hay arrecife adelante: si sí, gira; si no, avanza.",
         startPos: { x: 20, y: 35 },
         startDir: 1,
         fuel: 60,
@@ -149,7 +149,7 @@ else:
 # Si hay arrecife, debemos girar para esquivarlo.
 # Puedes ver el mapa: los arrecifes son visibles.
 
-repetir mientras combustible() > 0:
+while combustible() > 0:
     if sensor_adelante() == "arrecife" or sensor_adelante() == "tierra":
         girar_derecha()
         if sensor_adelante() == "arrecife" or sensor_adelante() == "tierra":
@@ -169,7 +169,7 @@ repetir mientras combustible() > 0:
         • <code>posicion_x()</code>, <code>posicion_y()</code> — tu posición actual<br>
         • <code>puerto_x(2)</code>, <code>puerto_y(2)</code> — coordenadas del Puerto Sur<br>
         • <code>rumbo_num()</code> — rumbo actual (0=Norte, 1=Este, 2=Sur, 3=Oeste)<br><br>
-        Calcula <code>dx</code> y <code>dy</code> para saber en qué dirección girar. Usa un bucle <code>repetir mientras</code> para repetir hasta llegar.`,
+        Calcula <code>dx</code> y <code>dy</code> para saber en qué dirección girar. Usa un bucle <code>while</code> para repetir hasta llegar.`,
         hint: "Alinea primero en X (si dx > 0, ve al Este; si dx < 0, al Oeste). Cuando dx == 0, alinea en Y (si dy > 0, ve al Sur; si dy < 0, al Norte).",
         startPos: { x: 20, y: 30 },
         startDir: 1,
@@ -178,7 +178,7 @@ repetir mientras combustible() > 0:
         randomReefs: 0,
         randomFish: 0,
         objectives: [
-            { id: "use_while", text: "Usa repetir mientras o while", check: (_boat, _start, code) => /repetir\s+mientras|while\s+/.test(code) },
+            { id: "use_while", text: "Usa while para navegar", check: (_boat, _start, code) => /while\s+/.test(code) },
             { id: "use_vars", text: "Usa variables (dx o dy)", check: (_boat, _start, code) => /\b(dx|dy)\s*=/.test(code) },
             { id: "reach_port2", text: "Llega al Puerto Sur (pisa la casilla)", check: (boat, _start, _code, world) => {
                 if (!world) return false;
@@ -193,7 +193,7 @@ repetir mientras combustible() > 0:
 #
 # Estrategia: alinear primero en X, luego en Y.
 
-repetir mientras combustible() > 0:
+while combustible() > 0:
     dx = puerto_x(2) - posicion_x()
     dy = puerto_y(2) - posicion_y()
 
@@ -328,7 +328,7 @@ def navegar():
                 else:
                     girar_izquierda()
 
-repetir mientras combustible() > 0:
+while combustible() > 0:
     navegar()
 `,
         successMsg: "¡Increíble! Has navegado a ciegas hasta el puerto esquivando arrecifes.",
@@ -461,7 +461,7 @@ def buscar_pesca():
                         girar_derecha()
                         pasos_rectos = 0
 
-repetir mientras combustible() > 0:
+while combustible() > 0:
     if carga() < 3:
         buscar_pesca()
     else:

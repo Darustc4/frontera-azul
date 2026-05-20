@@ -1,10 +1,10 @@
 /**
- * La Frontera Azul - Main Application (v2)
- * Wires game world, interpreter, missions, UI tabs, and interactions.
+ * La Frontera Azul - Main Application (v3)
+ * Uses Pyodide for real Python execution with animated replay.
  */
 
 import { GameWorld } from './game';
-import { Interpreter } from './interpreter';
+import { PythonExecutor } from './python-executor';
 import { MISSIONS, Mission } from './missions';
 import './style.css';
 
@@ -13,15 +13,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
     const world = new GameWorld(canvas);
     const consoleOutput = document.getElementById('console-output')!;
-    const interpreter = new Interpreter(world, consoleOutput);
+    const executor = new PythonExecutor(world, consoleOutput);
 
-    interpreter.onStep = () => updateStatus();
-
-    interpreter.onCheckObjectives = () => {
-        const mission = getCurrentMission();
-        const code = codeEditor.value;
-        return mission.objectives.every(obj => obj.check(world.boat, mission.startPos, code, world));
-    };
+    executor.onStep = () => updateStatus();
 
     // UI Elements
     const codeEditor = document.getElementById('code-editor') as HTMLTextAreaElement;
@@ -157,7 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateVariablesDisplay() {
         const container = document.getElementById('variables-display')!;
-        const vars = interpreter.getVariables();
+        const vars = executor.getVariables();
         const keys = Object.keys(vars);
 
         if (keys.length === 0) {
@@ -187,16 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
         codeEditor.value = mission.starterCode;
         updateLineNumbers();
 
-        world.resetMap();
-        world.reset(mission.startPos, mission.startDir, mission.fuel);
-        world.setFog(!!mission.fog);
-
-        if (mission.fixedReefs) world.addFixedReefs(mission.fixedReefs);
-        if (mission.randomReefs > 0)
-            world.addRandomReefs(mission.randomReefs, [mission.startPos]);
-        if (mission.randomFish > 0)
-            world.addRandomFish(mission.randomFish, [mission.startPos]);
-
+        setupMissionWorld(mission);
         world.render();
         renderObjectives();
         updateStatus();
@@ -301,21 +286,27 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (_e) { /* ignore */ }
     }
 
-    // ==================== CODE EXECUTION ====================
+    // ==================== MISSION SETUP HELPER ====================
 
-    async function runCode() {
-        if (world.animating) return;
-
-        const code = codeEditor.value.trim();
-        if (!code) { interpreter.log('⚠ Escribe código primero.', 'warning'); return; }
-
-        const mission = getCurrentMission();
+    function setupMissionWorld(mission: Mission) {
         world.resetMap();
         world.reset(mission.startPos, mission.startDir, mission.fuel);
         world.setFog(!!mission.fog);
         if (mission.fixedReefs) world.addFixedReefs(mission.fixedReefs);
         if (mission.randomReefs > 0) world.addRandomReefs(mission.randomReefs, [mission.startPos]);
         if (mission.randomFish > 0) world.addRandomFish(mission.randomFish, [mission.startPos]);
+    }
+
+    // ==================== CODE EXECUTION ====================
+
+    async function runCode() {
+        if (world.animating) return;
+
+        const code = codeEditor.value.trim();
+        if (!code) { executor.log('⚠ Escribe código primero.', 'warning'); return; }
+
+        const mission = getCurrentMission();
+        setupMissionWorld(mission);
         renderObjectives();
 
         btnRun.disabled = true;
@@ -324,19 +315,36 @@ document.addEventListener('DOMContentLoaded', () => {
         btnRun.textContent = '⏳ Ejecutando...';
         world.animating = true;
 
-        interpreter.log('─'.repeat(40), 'system');
+        executor.log('─'.repeat(40), 'system');
 
-        const speed = 550 - parseInt(speedSlider.value);
-        const result = await interpreter.execute(code, speed);
+        // Execute Python code (instant, no animation)
+        const result = await executor.execute(code);
+
+        if (executor.stopped) {
+            world.animating = false;
+            updateStatus();
+            btnRun.disabled = false;
+            btnValidate.disabled = false;
+            btnStop.disabled = true;
+            btnRun.textContent = '▶ Probar';
+            return;
+        }
+
+        // Replay actions with animation
+        if (result.actions.length > 0) {
+            setupMissionWorld(mission);
+            const speed = 550 - parseInt(speedSlider.value);
+            await executor.replayActions(result.actions, speed, mission.startPos, mission.startDir, mission.fuel);
+        }
 
         world.animating = false;
         updateStatus();
         updateVariablesDisplay();
 
-        if (result.success || world.boat.trail.length > 0) {
+        if (result.success || result.actions.length > 0) {
             const allDone = checkObjectives(code);
             if (allDone) {
-                interpreter.log('🎯 ¡Todos los objetivos cumplidos! Usa "Validar" para completar.', 'success');
+                executor.log('🎯 ¡Todos los objetivos cumplidos! Usa "Validar" para completar.', 'success');
             }
         }
 
@@ -352,7 +360,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (world.animating) return;
 
         const code = codeEditor.value.trim();
-        if (!code) { interpreter.log('⚠ Escribe código primero.', 'warning'); return; }
+        if (!code) { executor.log('⚠ Escribe código primero.', 'warning'); return; }
 
         const mission = getCurrentMission();
         const RUNS = 10;
@@ -361,23 +369,18 @@ document.addEventListener('DOMContentLoaded', () => {
         btnRun.disabled = true;
         btnValidate.disabled = true;
         btnStop.disabled = false;
-        interpreter.log('─'.repeat(40), 'system');
-        interpreter.log(`🔍 Validando solución (${RUNS} ejecuciones)...`, 'system');
+        executor.log('─'.repeat(40), 'system');
+        executor.log(`🔍 Validando solución (${RUNS} ejecuciones)...`, 'system');
 
         for (let run = 0; run < RUNS; run++) {
-            if (interpreter.stopped) break;
+            if (executor.stopped) break;
 
-            world.resetMap();
-            world.reset(mission.startPos, mission.startDir, mission.fuel);
-            world.setFog(!!mission.fog);
-            if (mission.fixedReefs) world.addFixedReefs(mission.fixedReefs);
-            if (mission.randomReefs > 0) world.addRandomReefs(mission.randomReefs, [mission.startPos]);
-            if (mission.randomFish > 0) world.addRandomFish(mission.randomFish, [mission.startPos]);
+            setupMissionWorld(mission);
 
-            interpreter.silent = true;
+            executor.silent = true;
             world.animating = true;
-            const result = await interpreter.execute(code, 0);
-            interpreter.silent = false;
+            const result = await executor.execute(code);
+            executor.silent = false;
             world.animating = false;
 
             const allDone = mission.objectives.every(obj => obj.check(world.boat, mission.startPos, code, world));
@@ -386,19 +389,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        if (interpreter.stopped) {
-            interpreter.log('⏹ Validación detenida.', 'warning');
+        if (executor.stopped) {
+            executor.log('⏹ Validación detenida.', 'warning');
         } else if (failures === 0) {
-            interpreter.log(`✓ ¡${RUNS}/${RUNS} ejecuciones exitosas! Misión completada.`, 'success');
+            executor.log(`✓ ¡${RUNS}/${RUNS} ejecuciones exitosas! Misión completada.`, 'success');
             completeMission();
         } else {
-            interpreter.log(`✗ ${failures}/${RUNS} ejecuciones fallidas. Ajusta tu algoritmo.`, 'error');
-            world.resetMap();
-            world.reset(mission.startPos, mission.startDir, mission.fuel);
-            world.setFog(!!mission.fog);
-            if (mission.fixedReefs) world.addFixedReefs(mission.fixedReefs);
-            if (mission.randomReefs > 0) world.addRandomReefs(mission.randomReefs, [mission.startPos]);
-            if (mission.randomFish > 0) world.addRandomFish(mission.randomFish, [mission.startPos]);
+            executor.log(`✗ ${failures}/${RUNS} ejecuciones fallidas. Ajusta tu algoritmo.`, 'error');
+            setupMissionWorld(mission);
             world.render();
         }
 
@@ -413,19 +411,14 @@ document.addEventListener('DOMContentLoaded', () => {
     btnRun.addEventListener('click', runCode);
     btnValidate.addEventListener('click', validateCode);
 
-    btnStop.addEventListener('click', () => { interpreter.stop(); });
+    btnStop.addEventListener('click', () => { executor.stop(); });
 
     btnReset.addEventListener('click', () => {
         const mission = getCurrentMission();
-        world.resetMap();
-        world.reset(mission.startPos, mission.startDir, mission.fuel);
-        world.setFog(!!mission.fog);
-        if (mission.fixedReefs) world.addFixedReefs(mission.fixedReefs);
-        if (mission.randomReefs > 0) world.addRandomReefs(mission.randomReefs, [mission.startPos]);
-        if (mission.randomFish > 0) world.addRandomFish(mission.randomFish, [mission.startPos]);
+        setupMissionWorld(mission);
         updateStatus();
         renderObjectives();
-        interpreter.log('↺ Barco reiniciado.', 'system');
+        executor.log('↺ Barco reiniciado.', 'system');
     });
 
     btnMissions.addEventListener('click', () => {
@@ -445,4 +438,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateLineNumbers();
     loadMission(currentMissionIdx);
     updateStatus();
+
+    // Pre-load Pyodide in background
+    executor.ensureLoaded();
 });
