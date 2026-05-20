@@ -596,4 +596,52 @@ export class GameWorld {
         }
         return grid;
     }
+
+    renderOverview(canvas: HTMLCanvasElement): void {
+        const ctx = canvas.getContext('2d')!;
+        const ts = Math.floor(canvas.width / this.worldW);
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        for (let y = 0; y < this.worldH; y++) {
+            for (let x = 0; x < this.worldW; x++) {
+                const px = x * ts, py = y * ts;
+                const cell = this.lakeMap[y][x];
+                switch (cell) {
+                    case this.LAND:
+                        ctx.fillStyle = '#2a4a3a';
+                        ctx.fillRect(px, py, ts, ts);
+                        break;
+                    case this.WATER:
+                        ctx.fillStyle = '#0a2a48';
+                        ctx.fillRect(px, py, ts, ts);
+                        break;
+                    case this.PORT:
+                        ctx.fillStyle = '#5a4a2a';
+                        ctx.fillRect(px, py, ts, ts);
+                        break;
+                }
+            }
+        }
+
+        // Draw port labels
+        ctx.fillStyle = '#c0a060';
+        ctx.font = `bold ${ts * 1.2}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (const port of this.ports) {
+            ctx.fillText(`⚓ P${port.id}`, port.x * ts + ts / 2, port.y * ts + ts / 2);
+        }
+
+        // Draw boat position
+        const bx = this.boat.x * ts + ts / 2;
+        const by = this.boat.y * ts + ts / 2;
+        ctx.fillStyle = '#e76f51';
+        ctx.beginPath();
+        ctx.arc(bx, by, ts * 0.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+    }
 }

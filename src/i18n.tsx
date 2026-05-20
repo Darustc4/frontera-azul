@@ -16,6 +16,8 @@ const es: Translations = {
   'world.objectives': 'Objetivos',
   'world.atPort': 'En puerto',
   'world.fishZone': 'Zona de pesca',
+  'world.overview': 'Mapa General',
+  'world.overviewHint': 'Vista del lago con puertos (sin arrecifes ni peces de la misión).',
 
   // Executor
   'executor.loading': 'Cargando Python (primera vez, ~10s)...',
@@ -198,6 +200,8 @@ const en: Translations = {
   'world.objectives': 'Objectives',
   'world.atPort': 'At port',
   'world.fishZone': 'Fishing zone',
+  'world.overview': 'Overview Map',
+  'world.overviewHint': 'Lake view with ports (no mission reefs or fish).',
 
   // Executor
   'executor.loading': 'Loading Python (first time, ~10s)...',

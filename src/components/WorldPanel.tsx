@@ -1,5 +1,5 @@
 import { RefObject } from 'react';
-import { Map, Fuel, Package, Target, Gauge, Anchor, Fish, CheckCircle2, Circle } from 'lucide-react';
+import { Map, Fuel, Package, Target, Gauge, Anchor, Fish, CheckCircle2, Circle, Globe } from 'lucide-react';
 import { useI18n } from '../i18n';
 
 interface WorldPanelProps {
@@ -12,6 +12,7 @@ interface WorldPanelProps {
   cargoText: string;
   messageText: string;
   objectives: { text: string; completed: boolean }[];
+  onShowOverview: () => void;
 }
 
 export function WorldPanel({
@@ -24,6 +25,7 @@ export function WorldPanel({
   cargoText,
   messageText,
   objectives,
+  onShowOverview,
 }: WorldPanelProps) {
   const fuelColor = fuelPct < 20 ? 'bg-error' : fuelPct < 40 ? 'bg-warning' : 'bg-success';
   const { t } = useI18n();
@@ -37,6 +39,13 @@ export function WorldPanel({
           {t('world.chart')}
         </span>
         <div className="flex items-center gap-3">
+          <button
+            onClick={onShowOverview}
+            className="flex items-center gap-1 text-xs text-text-dim hover:text-accent transition-colors"
+            title={t('world.overview')}
+          >
+            <Globe className="w-3.5 h-3.5" />
+          </button>
           <label className="flex items-center gap-1 text-xs text-text-dim" title="Velocidad de animación">
             <Gauge className="w-3.5 h-3.5" />
             <input

@@ -10,6 +10,7 @@ import { EditorPanel } from './components/EditorPanel';
 import { MissionModal } from './components/MissionModal';
 import { SuccessModal } from './components/SuccessModal';
 import { MissionsSidebar } from './components/MissionsSidebar';
+import { MapOverviewModal } from './components/MapOverviewModal';
 
 export interface LogEntry {
   id: number;
@@ -46,6 +47,7 @@ export default function App() {
   const [showMissionModal, setShowMissionModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
+  const [showOverview, setShowOverview] = useState(false);
   const [statusText, setStatusText] = useState('');
   const [fuelPct, setFuelPct] = useState(100);
   const [fuelAmount, setFuelAmount] = useState(100);
@@ -384,6 +386,7 @@ export default function App() {
           cargoText={cargoText}
           messageText={messageText}
           objectives={objectives}
+          onShowOverview={() => setShowOverview(true)}
         />
         <EditorPanel
           code={code}
@@ -423,6 +426,13 @@ export default function App() {
           missionStates={missionStates}
           onSelect={handleSelectMission}
           onClose={() => setShowSidebar(false)}
+        />
+      )}
+
+      {showOverview && worldRef.current && (
+        <MapOverviewModal
+          world={worldRef.current}
+          onClose={() => setShowOverview(false)}
         />
       )}
     </>
