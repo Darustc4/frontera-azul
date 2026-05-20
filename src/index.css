@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg-primary: #1a2332;
+  --color-bg-secondary: #0d1b2a;
+  --color-bg-tertiary: #0f1c2e;
+  --color-bg-panel: #162a3e;
+  --color-border: #1b4965;
+  --color-accent: #5fa8d3;
+  --color-accent-bright: #7ec8e3;
+  --color-success: #4ecdc4;
+  --color-warning: #f4a261;
+  --color-error: #e76f51;
+  --color-boat: #e76f51;
+  --color-text: #e0e0e0;
+  --color-text-dim: #8ab4c7;
+  --color-text-muted: #4a6a7a;
+}
+
+body {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background: var(--color-bg-primary);
+  color: var(--color-text);
+  height: 100vh;
+  overflow: hidden;
+}
+
+#root {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Code editor specific styles */
+.code-editor {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text);
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  tab-size: 4;
+  white-space: pre;
+}
+
+.code-editor::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* Canvas */
+#game-canvas {
+  border: 2px solid var(--color-border);
+  border-radius: 4px;
+  background: #0a1628;
+  display: block;
+}
+
+/* Console log styles */
+.log-info {
+  color: var(--color-accent-bright);
+}
+.log-success {
+  color: var(--color-success);
+}
+.log-error {
+  color: var(--color-error);
+}
+.log-warning {
+  color: var(--color-warning);
+}
+.log-system {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+/* Fuel bar animation */
+.fuel-fill {
+  transition:
+    width 0.3s,
+    background-color 0.3s;
+}
+
+/* Modal animation */
+.modal-backdrop {
+  animation: fadeIn 0.2s ease;
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Sidebar transition */
+.sidebar-enter {
+  transform: translateX(100%);
+}
+.sidebar-active {
+  transform: translateX(0);
+  transition: transform 0.3s ease;
+}
+
+/* Sensor grid */
+.sensor-cell {
+  width: 28px;
+  height: 28px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  border: 1px solid var(--color-border);
+}

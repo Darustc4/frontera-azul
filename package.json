@@ -12,12 +12,22 @@
     "test:executor": "tsx tests/executor.test.mts"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.0",
     "@types/node": "^25.9.1",
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.7.0",
     "jsdom": "^29.1.1",
     "pyodide": "0.26.4",
+    "tailwindcss": "^4.3.0",
     "tsx": "^4.22.3",
     "typescript": "^6.0.3",
     "vite": "^6.4.2",
     "vitest": "^4.1.7"
+  },
+  "dependencies": {
+    "lucide-react": "^1.16.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
   }
 }

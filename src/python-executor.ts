@@ -24,9 +24,10 @@ interface PyodideInterface {
 export class PythonExecutor {
     private pyodide: PyodideInterface | null = null;
     private world: GameWorld;
-    private consoleEl: HTMLElement;
+    private consoleEl: HTMLElement | null;
     private loadingPromise: Promise<void> | null = null;
 
+    public onLog: ((message: string, type: string) => void) | null = null;
     public onStep: (() => void) | null = null;
     public onCheckObjectives: (() => boolean) | null = null;
     public stopped = false;
@@ -37,9 +38,9 @@ export class PythonExecutor {
     private consoleMessages: { message: string; type: string }[] = [];
     private userVariables: Record<string, any> = {};
 
-    constructor(world: GameWorld, consoleEl: HTMLElement) {
+    constructor(world: GameWorld, consoleEl?: HTMLElement | null) {
         this.world = world;
-        this.consoleEl = consoleEl;
+        this.consoleEl = consoleEl || null;
     }
 
     // ==================== LOGGING ====================
@@ -49,14 +50,22 @@ export class PythonExecutor {
             this.consoleMessages.push({ message, type });
             return;
         }
-        const line = document.createElement('div');
-        line.className = `log-${type}`;
-        line.textContent = message;
-        this.consoleEl.appendChild(line);
-        this.consoleEl.scrollTop = this.consoleEl.scrollHeight;
+        if (this.onLog) {
+            this.onLog(message, type);
+            return;
+        }
+        if (this.consoleEl) {
+            const line = document.createElement('div');
+            line.className = `log-${type}`;
+            line.textContent = message;
+            this.consoleEl.appendChild(line);
+            this.consoleEl.scrollTop = this.consoleEl.scrollHeight;
+        }
     }
 
-    clearConsole(): void { this.consoleEl.innerHTML = ''; }
+    clearConsole(): void {
+        if (this.consoleEl) this.consoleEl.innerHTML = '';
+    }
 
     getVariables(): Record<string, any> { return { ...this.userVariables }; }
 
