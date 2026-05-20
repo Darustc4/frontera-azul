@@ -4,7 +4,34 @@
  * Scanner is relative to heading. Ports are fixed landmarks.
  */
 
-const MISSIONS = [
+import type { BoatState, GameWorld } from './game';
+
+export interface Objective {
+    id: string;
+    text: string;
+    check: (boat: BoatState, start: { x: number; y: number }, code: string, world: GameWorld) => boolean;
+}
+
+export interface Mission {
+    id: number;
+    title: string;
+    subtitle: string;
+    briefing: string;
+    hint: string;
+    startPos: { x: number; y: number };
+    startDir: number;
+    fuel: number;
+    fog: boolean;
+    randomReefs: number;
+    randomFish: number;
+    fixedReefs?: { x: number; y: number }[];
+    objectives: Objective[];
+    starterCode: string;
+    successMsg: string;
+    unlocks: number[];
+}
+
+export const MISSIONS: Mission[] = [
     {
         id: 1,
         title: "Arranque del Motor",
@@ -43,7 +70,7 @@ avanzar(5)
         randomReefs: 0,
         randomFish: 0,
         objectives: [
-            { id: "use_turn", text: "Usa girar_derecha() o girar_izquierda()", check: (boat, start, code) => /girar_(derecha|izquierda)\s*\(\)/.test(code) },
+            { id: "use_turn", text: "Usa girar_derecha() o girar_izquierda()", check: (_boat, _start, code) => /girar_(derecha|izquierda)\s*\(\)/.test(code) },
             { id: "move_10", text: "Recorre al menos 10 casillas en total", check: (boat) => boat.trail.length >= 10 }
         ],
         starterCode: `# MISIÓN 2: Aprender a Girar
@@ -64,13 +91,13 @@ avanzar(5)
         briefing: `Señal de emergencia recibida. Cubre una zona amplia con un patrón de búsqueda.<br><br>Usa <code>repetir(n):</code> para no repetir código. El barco debe recorrer al menos 20 casillas.`,
         hint: "Un zigzag: avanzar, girar, avanzar 1, girar de vuelta, avanzar. Repítelo con un bucle.",
         startPos: { x: 25, y: 35 },
-        startDir: 1, // East
+        startDir: 1,
         fuel: 100,
         fog: false,
         randomReefs: 0,
         randomFish: 0,
         objectives: [
-            { id: "use_loop", text: "Usa un bucle (repetir o for)", check: (boat, start, code) => /repetir|for\s+\w+\s+in\s+range/.test(code) },
+            { id: "use_loop", text: "Usa un bucle (repetir o for)", check: (_boat, _start, code) => /repetir|for\s+\w+\s+in\s+range/.test(code) },
             { id: "cover_20", text: "Recorre al menos 20 casillas", check: (boat) => boat.trail.length >= 20 }
         ],
         starterCode: `# MISIÓN 3: Patrón de Búsqueda
@@ -100,21 +127,21 @@ else:
     avanzar(1)</pre>Combínalo con <code>repetir mientras</code> para avanzar hasta el final del camino.`,
         hint: "Con 'repetir mientras combustible() > 0:' puedes repetir. Dentro, comprueba si hay arrecife adelante: si sí, gira; si no, avanza.",
         startPos: { x: 20, y: 35 },
-        startDir: 1, // East
+        startDir: 1,
         fuel: 60,
         fog: false,
         randomReefs: 0,
         randomFish: 0,
         fixedReefs: [
-            {x:23, y:35}, {x:24, y:35},
-            {x:26, y:34}, {x:26, y:35},
-            {x:29, y:35}, {x:29, y:34}, {x:29, y:33},
-            {x:32, y:35}, {x:32, y:34},
-            {x:34, y:33}, {x:34, y:34}, {x:34, y:35}
+            { x: 23, y: 35 }, { x: 24, y: 35 },
+            { x: 26, y: 34 }, { x: 26, y: 35 },
+            { x: 29, y: 35 }, { x: 29, y: 34 }, { x: 29, y: 33 },
+            { x: 32, y: 35 }, { x: 32, y: 34 },
+            { x: 34, y: 33 }, { x: 34, y: 34 }, { x: 34, y: 35 }
         ],
         objectives: [
-            { id: "use_if", text: "Usa un condicional (if)", check: (boat, start, code) => /^\s*if\s+/m.test(code) },
-            { id: "use_sensor", text: "Usa sensor_adelante()", check: (boat, start, code) => /sensor_adelante\s*\(/.test(code) },
+            { id: "use_if", text: "Usa un condicional (if)", check: (_boat, _start, code) => /^\s*if\s+/m.test(code) },
+            { id: "use_sensor", text: "Usa sensor_adelante()", check: (_boat, _start, code) => /sensor_adelante\s*\(/.test(code) },
             { id: "move_15", text: "Recorre al menos 15 casillas sin chocar", check: (boat) => boat.trail.length >= 15 }
         ],
         starterCode: `# MISIÓN 4: Sensor y Reacción
@@ -151,9 +178,9 @@ repetir mientras combustible() > 0:
         randomReefs: 0,
         randomFish: 0,
         objectives: [
-            { id: "use_while", text: "Usa repetir mientras o while", check: (boat, start, code) => /repetir\s+mientras|while\s+/.test(code) },
-            { id: "use_vars", text: "Usa variables (dx o dy)", check: (boat, start, code) => /\b(dx|dy)\s*=/.test(code) },
-            { id: "reach_port2", text: "Llega al Puerto Sur (pisa la casilla)", check: (boat, start, code, world) => {
+            { id: "use_while", text: "Usa repetir mientras o while", check: (_boat, _start, code) => /repetir\s+mientras|while\s+/.test(code) },
+            { id: "use_vars", text: "Usa variables (dx o dy)", check: (_boat, _start, code) => /\b(dx|dy)\s*=/.test(code) },
+            { id: "reach_port2", text: "Llega al Puerto Sur (pisa la casilla)", check: (boat, _start, _code, world) => {
                 if (!world) return false;
                 return world.map[boat.y][boat.x] === world.PORT;
             }}
@@ -220,10 +247,10 @@ repetir mientras combustible() > 0:
         randomReefs: 20,
         randomFish: 0,
         objectives: [
-            { id: "use_sensor", text: "Usa sensor_adelante() o escanear()", check: (boat, start, code) => /sensor_adelante\s*\(|escanear\s*\(/.test(code) },
-            { id: "use_if", text: "Usa un condicional (if)", check: (boat, start, code) => /^\s*if\s+/m.test(code) },
-            { id: "use_port_fn", text: "Usa puerto_x(), puerto_y() o distancia_puerto()", check: (boat, start, code) => /puerto_(x|y|cercano)|distancia_puerto/.test(code) },
-            { id: "reach_port1", text: "Llega al Puerto Norte (pisa la casilla)", check: (boat, start, code, world) => {
+            { id: "use_sensor", text: "Usa sensor_adelante() o escanear()", check: (_boat, _start, code) => /sensor_adelante\s*\(|escanear\s*\(/.test(code) },
+            { id: "use_if", text: "Usa un condicional (if)", check: (_boat, _start, code) => /^\s*if\s+/m.test(code) },
+            { id: "use_port_fn", text: "Usa puerto_x(), puerto_y() o distancia_puerto()", check: (_boat, _start, code) => /puerto_(x|y|cercano)|distancia_puerto/.test(code) },
+            { id: "reach_port1", text: "Llega al Puerto Norte (pisa la casilla)", check: (boat, _start, _code, world) => {
                 if (!world) return false;
                 return world.map[boat.y][boat.x] === world.PORT;
             }}
@@ -320,10 +347,10 @@ repetir mientras combustible() > 0:
         randomReefs: 10,
         randomFish: 15,
         objectives: [
-            { id: "use_func", text: "Define al menos una función", check: (boat, start, code) => /^\s*def\s+\w+\s*\(/m.test(code) },
-            { id: "use_scan", text: "Usa escanear() o sensor_adelante()", check: (boat, start, code) => /escanear\s*\(|sensor_adelante\s*\(/.test(code) },
+            { id: "use_func", text: "Define al menos una función", check: (_boat, _start, code) => /^\s*def\s+\w+\s*\(/m.test(code) },
+            { id: "use_scan", text: "Usa escanear() o sensor_adelante()", check: (_boat, _start, code) => /escanear\s*\(|sensor_adelante\s*\(/.test(code) },
             { id: "collect_3", text: "Recoge al menos 3 cargas", check: (boat) => boat.cargo >= 3 },
-            { id: "return_port", text: "Vuelve a un puerto (pisa la casilla)", check: (boat, start, code, world) => {
+            { id: "return_port", text: "Vuelve a un puerto (pisa la casilla)", check: (boat, _start, _code, world) => {
                 if (!world) return false;
                 return world.map[boat.y][boat.x] === world.PORT;
             }}

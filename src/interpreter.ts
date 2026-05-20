@@ -1,18 +1,55 @@
+/**
+ * La Frontera Azul - Interpreter
+ * Parses and executes a simplified Python-like language for boat control.
+ */
 
-class Interpreter {
-    constructor(gameWorld, consoleOutput) {
+import { GameWorld } from './game';
+
+interface Command {
+    type: string;
+    line: number;
+    needsBlock?: boolean;
+    body?: Command[];
+    elseBody?: Command[] | null;
+    condition?: string;
+    countExpr?: string;
+    varName?: string;
+    name?: string;
+    params?: string[];
+    expr?: string;
+    argsExpr?: string;
+}
+
+interface ParseResult {
+    commands: Command[];
+    nextIndex: number;
+}
+
+interface FunctionDef {
+    params: string[];
+    body: Command[];
+}
+
+export class Interpreter {
+    world: GameWorld;
+    consoleEl: HTMLElement;
+    variables: Record<string, any> = {};
+    functions: Record<string, FunctionDef> = {};
+    executionError = false;
+    onStep: (() => void) | null = null;
+    onCheckObjectives: (() => boolean) | null = null;
+    objectivesComplete = false;
+    silent = false;
+    stopped = false;
+    speed = 180;
+    moveCount = 0;
+
+    constructor(gameWorld: GameWorld, consoleOutput: HTMLElement) {
         this.world = gameWorld;
         this.consoleEl = consoleOutput;
-        this.variables = {};
-        this.functions = {};
-        this.executionError = false;
-        this.onStep = null;
-        this.onCheckObjectives = null; // returns true if all objectives met
-        this.objectivesComplete = false;
-        this.silent = false;
     }
 
-    log(message, type = 'info') {
+    log(message: string, type = 'info'): void {
         if (this.silent) return;
         const line = document.createElement('div');
         line.className = `log-${type}`;
@@ -21,10 +58,10 @@ class Interpreter {
         this.consoleEl.scrollTop = this.consoleEl.scrollHeight;
     }
 
-    clearConsole() { this.consoleEl.innerHTML = ''; }
-    getVariables() { return { ...this.variables }; }
+    clearConsole(): void { this.consoleEl.innerHTML = ''; }
+    getVariables(): Record<string, any> { return { ...this.variables }; }
 
-    async execute(code, speed) {
+    async execute(code: string, speed?: number): Promise<{ success: boolean }> {
         this.variables = {};
         this.functions = {};
         this.executionError = false;
@@ -56,9 +93,9 @@ class Interpreter {
         return { success: false };
     }
 
-    stop() { this.stopped = true; this.world.stop(); }
+    stop(): void { this.stopped = true; this.world.stop(); }
 
-    consumeTurnFuel() {
+    consumeTurnFuel(): boolean {
         if (this.world.boat.fuel <= 0) {
             this.log('✗ ¡Sin combustible para girar!', 'error');
             this.executionError = true;
@@ -71,8 +108,8 @@ class Interpreter {
 
     // ==================== PARSER ====================
 
-    parse(lines, startIdx, baseIndent) {
-        const commands = [];
+    parse(lines: string[], startIdx: number, baseIndent: number): ParseResult | null {
+        const commands: Command[] = [];
         let i = startIdx;
 
         while (i < lines.length) {
@@ -106,7 +143,6 @@ class Interpreter {
                 cmd.body = blockResult.commands;
                 i = blockResult.nextIndex;
 
-                // else clause — must be at same indent as the if
                 if (cmd.type === 'if' && i < lines.length) {
                     const elseLine = lines[i];
                     const elseLineIndent = elseLine ? elseLine.length - elseLine.trimStart().length : -1;
@@ -137,56 +173,43 @@ class Interpreter {
         return { commands, nextIndex: i };
     }
 
-    parseLine(line, lineNum) {
-        let match;
+    parseLine(line: string, lineNum: number): Command | null {
+        let match: RegExpMatchArray | null;
 
-        // repetir mientras condition:
         match = line.match(/^repetir\s+mientras\s+(.+?)\s*:\s*$/);
         if (match) return { type: 'while', condition: match[1], body: [], needsBlock: true, line: lineNum };
 
-        // repetir(n):
         match = line.match(/^repetir\s*\(\s*(.+?)\s*\)\s*:?\s*$/);
         if (match) return { type: 'loop', countExpr: match[1], body: [], needsBlock: true, line: lineNum };
 
-        // for i in range(n):
         match = line.match(/^for\s+(\w+)\s+in\s+range\s*\(\s*(.+?)\s*\)\s*:?\s*$/);
         if (match) return { type: 'for', varName: match[1], countExpr: match[2], body: [], needsBlock: true, line: lineNum };
 
-        // while condition:
         match = line.match(/^while\s+(.+?)\s*:\s*$/);
         if (match) return { type: 'while', condition: match[1], body: [], needsBlock: true, line: lineNum };
 
-        // if condition:
         match = line.match(/^if\s+(.+?)\s*:\s*$/);
         if (match) return { type: 'if', condition: match[1], body: [], elseBody: null, needsBlock: true, line: lineNum };
 
-        // def name():
         match = line.match(/^def\s+(\w+)\s*\(\s*([\w,\s]*)\s*\)\s*:\s*$/);
         if (match) return { type: 'def', name: match[1], params: match[2].split(',').map(s => s.trim()).filter(Boolean), body: [], needsBlock: true, line: lineNum };
 
-        // Variable assignment
         match = line.match(/^(\w+)\s*=\s*(.+)$/);
         if (match && !this.isKeyword(match[1]))
             return { type: 'assign', name: match[1], expr: match[2], line: lineNum };
 
-        // avanzar(n)
         match = line.match(/^avanzar\s*\(\s*(.+?)\s*\)\s*$/);
         if (match) return { type: 'advance', expr: match[1], line: lineNum };
 
-        // girar_derecha()
         if (/^girar_derecha\s*\(\s*\)\s*$/.test(line)) return { type: 'turn_right', line: lineNum };
 
-        // girar_izquierda()
         if (/^girar_izquierda\s*\(\s*\)\s*$/.test(line)) return { type: 'turn_left', line: lineNum };
 
-        // recoger()
         if (/^recoger\s*\(\s*\)\s*$/.test(line)) return { type: 'collect', line: lineNum };
 
-        // print(...)
         match = line.match(/^print\s*\(\s*(.+)\s*\)\s*$/);
         if (match) return { type: 'print', expr: match[1], line: lineNum };
 
-        // Function call: name() or name(args)
         match = line.match(/^(\w+)\s*\(\s*(.*?)\s*\)\s*$/);
         if (match) return { type: 'call', name: match[1], argsExpr: match[2], line: lineNum };
 
@@ -194,13 +217,13 @@ class Interpreter {
         return null;
     }
 
-    isKeyword(word) {
+    isKeyword(word: string): boolean {
         return ['if', 'else', 'for', 'while', 'def', 'repetir', 'mientras', 'in', 'range', 'and', 'or', 'not', 'True', 'False'].includes(word);
     }
 
     // ==================== EXECUTOR ====================
 
-    async executeLive(commands) {
+    async executeLive(commands: Command[]): Promise<boolean> {
         for (const cmd of commands) {
             if (this.executionError || this.stopped) return false;
             if (this.objectivesComplete) return true;
@@ -209,19 +232,19 @@ class Interpreter {
         return true;
     }
 
-    async executeLiveOne(cmd) {
+    async executeLiveOne(cmd: Command): Promise<boolean> {
         if (this.stopped) return false;
 
         switch (cmd.type) {
             case 'assign': {
-                const val = this.evalExpr(cmd.expr, cmd.line);
+                const val = this.evalExpr(cmd.expr!, cmd.line);
                 if (val === undefined) return false;
-                this.variables[cmd.name] = val;
+                this.variables[cmd.name!] = val;
                 return true;
             }
 
             case 'advance': {
-                const steps = this.evalExpr(cmd.expr, cmd.line);
+                const steps = this.evalExpr(cmd.expr!, cmd.line);
                 if (steps === undefined) return false;
                 const n = Math.floor(Number(steps));
                 if (isNaN(n) || n < 0) { this.log(`✗ Línea ${cmd.line}: avanzar necesita un número positivo`, 'error'); return false; }
@@ -248,7 +271,6 @@ class Interpreter {
                 if (!result.ok) { this.log(`✗ Línea ${cmd.line}: ${result.reason}`, 'error'); return false; }
                 this.log('📦 ¡Carga recogida!', 'success');
                 if (this.onStep) this.onStep();
-                // Check objectives after collecting (may satisfy cargo goals)
                 if (this.onCheckObjectives && this.onCheckObjectives()) {
                     this.objectivesComplete = true;
                 }
@@ -256,35 +278,35 @@ class Interpreter {
             }
 
             case 'print': {
-                const val = this.evalExpr(cmd.expr, cmd.line);
+                const val = this.evalExpr(cmd.expr!, cmd.line);
                 if (val === undefined) return false;
                 this.log(String(val), 'info');
                 return true;
             }
 
             case 'loop': {
-                const count = this.evalExpr(cmd.countExpr, cmd.line);
+                const count = this.evalExpr(cmd.countExpr!, cmd.line);
                 if (count === undefined) return false;
                 const n = Math.floor(Number(count));
                 if (isNaN(n) || n < 0) { this.log(`✗ Línea ${cmd.line}: repetir necesita un número positivo`, 'error'); return false; }
                 for (let i = 0; i < n; i++) {
                     if (this.stopped || this.executionError) return false;
                     if (this.objectivesComplete) return true;
-                    if (!await this.executeLive(cmd.body)) return false;
+                    if (!await this.executeLive(cmd.body!)) return false;
                 }
                 return true;
             }
 
             case 'for': {
-                const count = this.evalExpr(cmd.countExpr, cmd.line);
+                const count = this.evalExpr(cmd.countExpr!, cmd.line);
                 if (count === undefined) return false;
                 const n = Math.floor(Number(count));
                 if (isNaN(n) || n < 0) return false;
                 for (let i = 0; i < n; i++) {
                     if (this.stopped || this.executionError) return false;
                     if (this.objectivesComplete) return true;
-                    this.variables[cmd.varName] = i;
-                    if (!await this.executeLive(cmd.body)) return false;
+                    this.variables[cmd.varName!] = i;
+                    if (!await this.executeLive(cmd.body!)) return false;
                 }
                 return true;
             }
@@ -295,10 +317,10 @@ class Interpreter {
                 while (iterations < MAX_ITER) {
                     if (this.stopped || this.executionError) return false;
                     if (this.objectivesComplete) return true;
-                    const cond = this.evalCondition(cmd.condition, cmd.line);
+                    const cond = this.evalCondition(cmd.condition!, cmd.line);
                     if (cond === undefined) return false;
                     if (!cond) break;
-                    if (!await this.executeLive(cmd.body)) return false;
+                    if (!await this.executeLive(cmd.body!)) return false;
                     iterations++;
                 }
                 if (iterations >= MAX_ITER) {
@@ -309,15 +331,15 @@ class Interpreter {
             }
 
             case 'if': {
-                const cond = this.evalCondition(cmd.condition, cmd.line);
+                const cond = this.evalCondition(cmd.condition!, cmd.line);
                 if (cond === undefined) return false;
-                if (cond) return await this.executeLive(cmd.body);
+                if (cond) return await this.executeLive(cmd.body!);
                 else if (cmd.elseBody) return await this.executeLive(cmd.elseBody);
                 return true;
             }
 
             case 'def':
-                this.functions[cmd.name] = { params: cmd.params, body: cmd.body };
+                this.functions[cmd.name!] = { params: cmd.params!, body: cmd.body! };
                 return true;
 
             case 'call':
@@ -329,7 +351,7 @@ class Interpreter {
         }
     }
 
-    async moveSteps(dx, dy, n, line) {
+    async moveSteps(dx: number, dy: number, n: number, line: number): Promise<boolean> {
         for (let i = 0; i < n; i++) {
             if (this.stopped) return false;
             const newX = this.world.boat.x + dx;
@@ -360,7 +382,6 @@ class Interpreter {
                 if (this.onStep) this.onStep();
             }
 
-            // Check if objectives are satisfied — stop early
             if (this.onCheckObjectives && this.onCheckObjectives()) {
                 this.objectivesComplete = true;
                 return true;
@@ -369,8 +390,8 @@ class Interpreter {
         return true;
     }
 
-    async executeLiveCall(cmd) {
-        const fn = this.functions[cmd.name];
+    async executeLiveCall(cmd: Command): Promise<boolean> {
+        const fn = this.functions[cmd.name!];
         if (!fn) { this.log(`✗ Línea ${cmd.line}: función '${cmd.name}' no definida`, 'error'); return false; }
 
         const args = cmd.argsExpr ? cmd.argsExpr.split(',').map(a => this.evalExpr(a.trim(), cmd.line)) : [];
@@ -382,7 +403,6 @@ class Interpreter {
 
         const result = await this.executeLive(fn.body);
 
-        // Restore only the parameter variables
         for (const p of fn.params) {
             if (savedVars[p] !== undefined) this.variables[p] = savedVars[p];
             else delete this.variables[p];
@@ -392,36 +412,30 @@ class Interpreter {
 
     // ==================== EXPRESSION EVALUATOR ====================
 
-    evalExpr(expr, line) {
+    evalExpr(expr: string, line: number): any {
         try {
             let e = expr.trim();
 
-            // String literal
             if ((e.startsWith('"') && e.endsWith('"')) || (e.startsWith("'") && e.endsWith("'")))
                 return e.slice(1, -1);
 
-            // escanear()
             if (/^escanear\s*\(\)\s*$/.test(e)) return this.world.scan();
 
-            // Boolean: or
             if (/\bor\b/.test(e)) {
                 const parts = e.split(/\bor\b/);
                 for (const p of parts) { const v = this.evalExpr(p.trim(), line); if (v) return v; }
                 return false;
             }
-            // Boolean: and
             if (/\band\b/.test(e)) {
                 const parts = e.split(/\band\b/);
-                let result = true;
+                let result: any = true;
                 for (const p of parts) { const v = this.evalExpr(p.trim(), line); if (!v) return false; result = v; }
                 return result;
             }
 
-            // not
             const notMatch = e.match(/^not\s+(.+)$/);
             if (notMatch) { const v = this.evalExpr(notMatch[1], line); return v === undefined ? undefined : !v; }
 
-            // Comparison (must come before unary negation to handle -x > -y)
             const cmpMatch = e.match(/^(.+?)\s*(==|!=|>=|<=|>|<)\s*(.+)$/);
             if (cmpMatch) {
                 const left = this.evalExpr(cmpMatch[1], line);
@@ -437,29 +451,26 @@ class Interpreter {
                 }
             }
 
-            // Unary negation (only if no comparison operator present)
             const unaryNeg = e.match(/^-\s*(.+)$/);
             if (unaryNeg) {
                 const v = this.evalExpr(unaryNeg[1], line);
                 return v === undefined ? undefined : -v;
             }
 
-            // Modulo: expr % expr
             const modMatch = e.match(/^(.+?)\s*%\s*(.+)$/);
             if (modMatch) {
                 const left = this.evalExpr(modMatch[1], line);
                 const right = this.evalExpr(modMatch[2], line);
                 if (left === undefined || right === undefined) return undefined;
-                return ((left % right) + right) % right; // Python-style modulo
+                return ((left % right) + right) % right;
             }
 
-            // Array indexing: var[i][j] or var[i]
             const idxMatch = e.match(/^(\w+)((?:\s*\[\s*.+?\s*\])+)\s*$/);
             if (idxMatch) {
-                let val = this.variables[idxMatch[1]];
+                let val: any = this.variables[idxMatch[1]];
                 if (val === undefined) { this.log(`✗ Línea ${line}: variable '${idxMatch[1]}' no definida`, 'error'); return undefined; }
                 const idxRegex = /\[\s*(.+?)\s*\]/g;
-                let m;
+                let m: RegExpExecArray | null;
                 while ((m = idxRegex.exec(idxMatch[2])) !== null) {
                     const idx = this.evalExpr(m[1], line);
                     if (idx === undefined) return undefined;
@@ -470,7 +481,6 @@ class Interpreter {
                 return val;
             }
 
-            // Built-in sensor/utility function calls
             e = e.replace(/sensor_adelante\s*\(\)/g, () => `"${this.world.sensorForward()}"`);
             e = e.replace(/sensor_derecha\s*\(\)/g, () => `"${this.world.sensorRight()}"`);
             e = e.replace(/sensor_izquierda\s*\(\)/g, () => `"${this.world.sensorLeft()}"`);
@@ -481,7 +491,6 @@ class Interpreter {
             e = e.replace(/rumbo\s*\(\)/g, () => `"${this.world.getDirectionName()}"`);
             e = e.replace(/combustible\s*\(\)/g, () => this.world.boat.fuel.toString());
             e = e.replace(/carga\s*\(\)/g, () => this.world.boat.cargo.toString());
-            // Port utilities
             e = e.replace(/puerto_cercano\s*\(\)/g, () => this.world.nearestPort().toString());
             e = e.replace(/distancia_puerto\s*\(\s*(.+?)\s*\)/g, (_, arg) => {
                 const n = this.resolveArg(arg, line);
@@ -499,7 +508,6 @@ class Interpreter {
             e = e.replace(/puerto_x\s*\(\)/g, () => this.world.portX(this.world.nearestPort()).toString());
             e = e.replace(/puerto_y\s*\(\)/g, () => this.world.portY(this.world.nearestPort()).toString());
 
-            // Variable substitution
             e = e.replace(/\b([a-zA-Z_]\w*)\b/g, (match) => {
                 if (['true', 'false', 'True', 'False', 'null', 'undefined'].includes(match)) return match;
                 if (this.variables[match] !== undefined) {
@@ -510,44 +518,37 @@ class Interpreter {
                 return match;
             });
 
-            // Python booleans
             e = e.replace(/\bTrue\b/g, 'true');
             e = e.replace(/\bFalse\b/g, 'false');
 
-            // Safe arithmetic eval
             const safeExpr = e.replace(/"[^"]*"/g, '""').replace(/'[^']*'/g, "''");
             if (/^[\d\s+\-*/%().<>=!&|"'truefalse]+$/.test(safeExpr)) {
                 const result = Function('"use strict"; return (' + e + ')')();
                 return result;
             }
 
-            // Plain number
             if (!isNaN(Number(e))) return Number(e);
 
-            // Variable holding array
             if (this.variables[e] !== undefined) return this.variables[e];
 
             this.log(`✗ Línea ${line}: no puedo evaluar '${expr}'`, 'error');
             return undefined;
-        } catch (err) {
+        } catch (_err) {
             this.log(`✗ Línea ${line}: error evaluando '${expr}'`, 'error');
             return undefined;
         }
     }
 
-    evalCondition(condStr, line) {
+    evalCondition(condStr: string, line: number): boolean | undefined {
         const result = this.evalExpr(condStr, line);
         if (result === undefined) return undefined;
         return !!result;
     }
 
-    /**
-     * Resolve a function argument that could be a literal or a variable.
-     */
-    resolveArg(arg, line) {
+    resolveArg(arg: string, line: number): number | undefined {
         const trimmed = arg.trim();
         if (!isNaN(Number(trimmed))) return Number(trimmed);
         if (this.variables[trimmed] !== undefined) return Number(this.variables[trimmed]);
-        return this.evalExpr(trimmed, line);
+        return this.evalExpr(trimmed, line) as number | undefined;
     }
 }

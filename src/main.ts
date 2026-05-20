@@ -3,16 +3,20 @@
  * Wires game world, interpreter, missions, UI tabs, and interactions.
  */
 
+import { GameWorld } from './game';
+import { Interpreter } from './interpreter';
+import { MISSIONS, Mission } from './missions';
+import './style.css';
+
 document.addEventListener('DOMContentLoaded', () => {
     // ==================== INITIALIZATION ====================
-    const canvas = document.getElementById('game-canvas');
+    const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
     const world = new GameWorld(canvas);
-    const consoleOutput = document.getElementById('console-output');
+    const consoleOutput = document.getElementById('console-output')!;
     const interpreter = new Interpreter(world, consoleOutput);
 
     interpreter.onStep = () => updateStatus();
 
-    // Stop execution early when all objectives are met
     interpreter.onCheckObjectives = () => {
         const mission = getCurrentMission();
         const code = codeEditor.value;
@@ -20,37 +24,37 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // UI Elements
-    const codeEditor = document.getElementById('code-editor');
-    const lineNumbers = document.getElementById('line-numbers');
-    const btnRun = document.getElementById('btn-run');
-    const btnValidate = document.getElementById('btn-validate');
-    const btnStop = document.getElementById('btn-stop');
-    const btnReset = document.getElementById('btn-reset');
-    const btnMissions = document.getElementById('btn-missions');
-    const speedSlider = document.getElementById('speed-slider');
-    const coordsDisplay = document.getElementById('coords-display');
-    const fuelDisplay = document.getElementById('fuel-display');
-    const fuelFill = document.getElementById('fuel-fill');
-    const cargoDisplay = document.getElementById('cargo-display');
-    const messageDisplay = document.getElementById('message-display');
-    const missionLabel = document.getElementById('mission-label');
-    const objectivesList = document.getElementById('objectives-list');
+    const codeEditor = document.getElementById('code-editor') as HTMLTextAreaElement;
+    const lineNumbers = document.getElementById('line-numbers')!;
+    const btnRun = document.getElementById('btn-run') as HTMLButtonElement;
+    const btnValidate = document.getElementById('btn-validate') as HTMLButtonElement;
+    const btnStop = document.getElementById('btn-stop') as HTMLButtonElement;
+    const btnReset = document.getElementById('btn-reset') as HTMLButtonElement;
+    const btnMissions = document.getElementById('btn-missions') as HTMLButtonElement;
+    const speedSlider = document.getElementById('speed-slider') as HTMLInputElement;
+    const coordsDisplay = document.getElementById('coords-display')!;
+    const fuelDisplay = document.getElementById('fuel-display')!;
+    const fuelFill = document.getElementById('fuel-fill')!;
+    const cargoDisplay = document.getElementById('cargo-display')!;
+    const messageDisplay = document.getElementById('message-display')!;
+    const missionLabel = document.getElementById('mission-label')!;
+    const objectivesList = document.getElementById('objectives-list')!;
 
     // Modals
-    const missionModal = document.getElementById('mission-modal');
-    const modalTitle = document.getElementById('modal-title');
-    const modalText = document.getElementById('modal-text');
-    const modalObjectives = document.getElementById('modal-objectives');
-    const modalAccept = document.getElementById('modal-accept');
-    const successModal = document.getElementById('success-modal');
-    const successTitle = document.getElementById('success-title');
-    const successBody = document.getElementById('success-body');
-    const successNext = document.getElementById('success-next');
+    const missionModal = document.getElementById('mission-modal')!;
+    const modalTitle = document.getElementById('modal-title')!;
+    const modalText = document.getElementById('modal-text')!;
+    const modalObjectives = document.getElementById('modal-objectives')!;
+    const modalAccept = document.getElementById('modal-accept')!;
+    const successModal = document.getElementById('success-modal')!;
+    const successTitle = document.getElementById('success-title')!;
+    const successBody = document.getElementById('success-body')!;
+    const successNext = document.getElementById('success-next') as HTMLButtonElement;
 
     // Sidebar
-    const missionsSidebar = document.getElementById('missions-sidebar');
-    const missionsList = document.getElementById('missions-list');
-    const closeMissions = document.getElementById('close-missions');
+    const missionsSidebar = document.getElementById('missions-sidebar')!;
+    const missionsList = document.getElementById('missions-list')!;
+    const closeMissions = document.getElementById('close-missions')!;
 
     // Tabs
     const tabBtns = document.querySelectorAll('.tab-btn');
@@ -58,7 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // State
     let currentMissionIdx = 0;
-    let missionStates = MISSIONS.map(() => 'locked');
+    let missionStates: string[] = MISSIONS.map(() => 'locked');
     missionStates[0] = 'current';
     loadProgress();
 
@@ -96,7 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
             tabBtns.forEach(b => b.classList.remove('active'));
             tabContents.forEach(c => c.classList.remove('active'));
             btn.classList.add('active');
-            document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+            document.getElementById('tab-' + (btn as HTMLElement).dataset.tab)!.classList.add('active');
         });
     });
 
@@ -121,11 +125,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateSensorDisplay() {
         const grid = world.getSensorGrid();
-        const sensorGrid = document.getElementById('sensor-grid');
-        const sensorInfo = document.getElementById('sensor-info');
+        const sensorGrid = document.getElementById('sensor-grid')!;
+        const sensorInfo = document.getElementById('sensor-info')!;
 
-        const typeIcons = { agua: '~', arrecife: '▲', puerto: '⚓', pesca: '🐟', boat: '🚢', tierra: '▓', fuera: '▓' };
-        const typeClasses = { agua: 'water', arrecife: 'obstacle', puerto: 'port', pesca: 'fish', boat: 'boat', tierra: 'land', fuera: 'land' };
+        const typeIcons: Record<string, string> = { agua: '~', arrecife: '▲', puerto: '⚓', pesca: '🐟', boat: '🚢', tierra: '▓', fuera: '▓' };
+        const typeClasses: Record<string, string> = { agua: 'water', arrecife: 'obstacle', puerto: 'port', pesca: 'fish', boat: 'boat', tierra: 'land', fuera: 'land' };
 
         let html = '';
         grid.forEach((row) => {
@@ -152,7 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateVariablesDisplay() {
-        const container = document.getElementById('variables-display');
+        const container = document.getElementById('variables-display')!;
         const vars = interpreter.getVariables();
         const keys = Object.keys(vars);
 
@@ -164,7 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let html = '';
         keys.forEach(k => {
             const v = vars[k];
-            let display;
+            let display: string;
             if (Array.isArray(v)) display = `[${v.length > 5 ? v.slice(0, 3).join(',') + '...' : v.join(',')}]`;
             else display = JSON.stringify(v);
             html += `<div class="var-item"><span class="var-name">${k}</span><span class="var-value">${display}</span></div>`;
@@ -174,9 +178,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ==================== MISSION SYSTEM ====================
 
-    function getCurrentMission() { return MISSIONS[currentMissionIdx]; }
+    function getCurrentMission(): Mission { return MISSIONS[currentMissionIdx]; }
 
-    function loadMission(idx) {
+    function loadMission(idx: number) {
         currentMissionIdx = idx;
         const mission = MISSIONS[idx];
         missionLabel.textContent = `Misión ${mission.id}: ${mission.title}`;
@@ -199,7 +203,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showMissionBriefing(mission);
     }
 
-    function showMissionBriefing(mission) {
+    function showMissionBriefing(mission: Mission) {
         modalTitle.textContent = `Misión ${mission.id}: ${mission.title}`;
         modalText.innerHTML = mission.briefing;
 
@@ -222,7 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function checkObjectives(code) {
+    function checkObjectives(code: string): boolean {
         const mission = getCurrentMission();
         let allComplete = true;
         const items = objectivesList.querySelectorAll('li');
@@ -251,7 +255,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         successTitle.textContent = `¡Misión ${mission.id} Completada!`;
         successBody.innerHTML = `<p>${mission.successMsg}</p>`;
-        const nextIdx = MISSIONS.findIndex((m, i) => missionStates[i] === 'current');
+        const nextIdx = MISSIONS.findIndex((_m, i) => missionStates[i] === 'current');
         successNext.style.display = nextIdx >= 0 ? 'inline-block' : 'none';
         successNext.onclick = () => {
             successModal.classList.remove('visible');
@@ -284,7 +288,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==================== PERSISTENCE ====================
 
     function saveProgress() {
-        try { localStorage.setItem('frontera_azul_v2', JSON.stringify(missionStates)); } catch (e) {}
+        try { localStorage.setItem('frontera_azul_v2', JSON.stringify(missionStates)); } catch (_e) { /* ignore */ }
     }
 
     function loadProgress() {
@@ -294,7 +298,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const states = JSON.parse(saved);
                 if (states.length === MISSIONS.length) missionStates = states;
             }
-        } catch (e) {}
+        } catch (_e) { /* ignore */ }
     }
 
     // ==================== CODE EXECUTION ====================
@@ -389,7 +393,6 @@ document.addEventListener('DOMContentLoaded', () => {
             completeMission();
         } else {
             interpreter.log(`✗ ${failures}/${RUNS} ejecuciones fallidas. Ajusta tu algoritmo.`, 'error');
-            // Reload mission state visually
             world.resetMap();
             world.reset(mission.startPos, mission.startDir, mission.fuel);
             world.setFog(!!mission.fog);

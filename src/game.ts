@@ -5,74 +5,92 @@
  * Scanner returns data RELATIVE to boat heading.
  */
 
-class GameWorld {
-    constructor(canvas) {
+export interface Port {
+    id: number;
+    x: number;
+    y: number;
+    name: string;
+}
+
+export interface BoatState {
+    x: number;
+    y: number;
+    direction: number; // 0=N, 1=E, 2=S, 3=W
+    fuel: number;
+    maxFuel: number;
+    cargo: number;
+    maxCargo: number;
+    trail: { x: number; y: number }[];
+    collectedZones: Set<string>;
+}
+
+export type CellType = 'tierra' | 'agua' | 'puerto' | 'pesca' | 'arrecife';
+
+export class GameWorld {
+    canvas: HTMLCanvasElement;
+    ctx: CanvasRenderingContext2D;
+
+    worldW = 60;
+    worldH = 60;
+
+    viewSize = 21;
+    tileSize: number;
+
+    // Cell type constants
+    LAND = 0;
+    WATER = 1;
+    PORT = 2;
+    FISH = 3;
+    REEF = 4;
+
+    ports: Port[] = [
+        { id: 1, x: 18, y: 14, name: "Puerto Norte" },
+        { id: 2, x: 42, y: 46, name: "Puerto Sur" }
+    ];
+
+    boat: BoatState = {
+        x: 30, y: 30,
+        direction: 0,
+        fuel: 100,
+        maxFuel: 100,
+        cargo: 0,
+        maxCargo: 5,
+        trail: [],
+        collectedZones: new Set()
+    };
+
+    lakeMap: number[][];
+    map: number[][];
+
+    fog = false;
+    revealed: Set<string> = new Set();
+
+    animating = false;
+    stopped = false;
+    animSpeed = 180;
+    waterTime = 0;
+
+    constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
-        this.ctx = canvas.getContext('2d');
-
-        // World dimensions
-        this.worldW = 60;
-        this.worldH = 60;
-
-        // Viewport (odd so boat is exactly centered)
-        this.viewSize = 21;
+        this.ctx = canvas.getContext('2d')!;
         this.tileSize = Math.floor(canvas.width / this.viewSize);
 
-        // Cell types
-        this.LAND = 0;
-        this.WATER = 1;
-        this.PORT = 2;
-        this.FISH = 3;
-        this.REEF = 4;
-
-        // Fixed port locations
-        this.ports = [
-            { id: 1, x: 18, y: 14, name: "Puerto Norte" },
-            { id: 2, x: 42, y: 46, name: "Puerto Sur" }
-        ];
-
-        // Boat state
-        this.boat = {
-            x: 30, y: 30,
-            direction: 0, // 0=N, 1=E, 2=S, 3=W
-            fuel: 100,
-            maxFuel: 100,
-            cargo: 0,
-            maxCargo: 5,
-            trail: [],
-            collectedZones: new Set()
-        };
-
-        // Generate fixed lake shape
         this.lakeMap = this.generateLake();
-        // Working map (reefs/fish added per mission)
         this.map = this.lakeMap.map(row => [...row]);
-
-        // Fog of war
-        this.fog = false;
-        this.revealed = new Set();
-
-        // Animation
-        this.animating = false;
-        this.stopped = false;
-        this.animSpeed = 180;
-        this.waterTime = 0;
 
         this.startWaterAnimation();
     }
 
     // ==================== LAKE GENERATION ====================
 
-    generateLake() {
+    generateLake(): number[][] {
         const W = this.worldW, H = this.worldH;
-        const map = Array(H).fill(null).map(() => Array(W).fill(this.LAND));
+        const map: number[][] = Array(H).fill(null).map(() => Array(W).fill(this.LAND));
         const cx = W / 2, cy = H / 2;
 
-        // Seeded PRNG for reproducible lake
         const rng = this.mulberry32(42);
 
-        // Harmonic coefficients for irregular shore
-        const harmonics = [];
+        const harmonics: { amp: number; freq: number; phase: number }[] = [];
         for (let i = 0; i < 8; i++) {
             harmonics.push({
                 amp: 2 + rng() * 4,
@@ -90,7 +108,6 @@ class GameWorld {
                 for (const h of harmonics) {
                     boundaryR += h.amp * Math.sin(angle * h.freq + h.phase);
                 }
-                // Slight elongation on x-axis for variety
                 const dist = Math.sqrt((dx * 0.92) ** 2 + dy ** 2);
                 if (dist < boundaryR) {
                     map[y][x] = this.WATER;
@@ -98,11 +115,9 @@ class GameWorld {
             }
         }
 
-        // Place ports — ensure they're on water, nudge if needed
         for (const port of this.ports) {
             this.ensureWaterCell(map, port, cx, cy);
             map[port.y][port.x] = this.PORT;
-            // Make a 2-cell dock
             const adj = this.findAdjacentOfType(map, port.x, port.y, this.WATER);
             if (adj) map[adj.y][adj.x] = this.PORT;
         }
@@ -110,7 +125,7 @@ class GameWorld {
         return map;
     }
 
-    ensureWaterCell(map, port, cx, cy) {
+    ensureWaterCell(map: number[][], port: Port, cx: number, cy: number): void {
         if (map[port.y] && map[port.y][port.x] === this.WATER) return;
         const dx = cx - port.x, dy = cy - port.y;
         const len = Math.sqrt(dx * dx + dy * dy) || 1;
@@ -123,8 +138,8 @@ class GameWorld {
         }
     }
 
-    findAdjacentOfType(map, x, y, type) {
-        for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+    findAdjacentOfType(map: number[][], x: number, y: number, type: number): { x: number; y: number } | null {
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
             const nx = x + dx, ny = y + dy;
             if (nx >= 0 && nx < this.worldW && ny >= 0 && ny < this.worldH && map[ny][nx] === type)
                 return { x: nx, y: ny };
@@ -132,7 +147,7 @@ class GameWorld {
         return null;
     }
 
-    mulberry32(seed) {
+    mulberry32(seed: number): () => number {
         let s = seed | 0;
         return function () {
             s = (s + 0x6D2B79F5) | 0;
@@ -144,12 +159,12 @@ class GameWorld {
 
     // ==================== MAP SETUP PER MISSION ====================
 
-    resetMap() {
+    resetMap(): void {
         this.map = this.lakeMap.map(row => [...row]);
     }
 
-    addRandomReefs(count, avoid = []) {
-        const avoidSet = new Set();
+    addRandomReefs(count: number, avoid: { x: number; y: number }[] = []): void {
+        const avoidSet = new Set<string>();
         avoid.forEach(p => {
             for (let dy = -3; dy <= 3; dy++)
                 for (let dx = -3; dx <= 3; dx++)
@@ -173,15 +188,15 @@ class GameWorld {
         }
     }
 
-    addFixedReefs(reefs) {
+    addFixedReefs(reefs: { x: number; y: number }[]): void {
         for (const r of reefs) {
             if (r.x >= 0 && r.x < this.worldW && r.y >= 0 && r.y < this.worldH)
                 this.map[r.y][r.x] = this.REEF;
         }
     }
 
-    addRandomFish(count, avoid = []) {
-        const avoidSet = new Set();
+    addRandomFish(count: number, avoid: { x: number; y: number }[] = []): void {
+        const avoidSet = new Set<string>();
         avoid.forEach(p => {
             for (let dy = -2; dy <= 2; dy++)
                 for (let dx = -2; dx <= 2; dx++)
@@ -203,7 +218,7 @@ class GameWorld {
 
     // ==================== BOAT STATE ====================
 
-    reset(pos, dir, fuel) {
+    reset(pos?: { x: number; y: number }, dir?: number, fuel?: number): void {
         this.boat.x = pos ? pos.x : 30;
         this.boat.y = pos ? pos.y : 30;
         this.boat.direction = dir || 0;
@@ -219,14 +234,14 @@ class GameWorld {
         this.render();
     }
 
-    setFog(enabled) {
+    setFog(enabled: boolean): void {
         this.fog = enabled;
         this.revealed = new Set();
         if (enabled) this.revealAround(this.boat.x, this.boat.y);
         this.render();
     }
 
-    revealAround(cx, cy) {
+    revealAround(cx: number, cy: number): void {
         for (let dy = -5; dy <= 5; dy++)
             for (let dx = -5; dx <= 5; dx++) {
                 const x = cx + dx, y = cy + dy;
@@ -235,13 +250,13 @@ class GameWorld {
             }
     }
 
-    isRevealed(x, y) {
+    isRevealed(x: number, y: number): boolean {
         return !this.fog || this.revealed.has(`${x},${y}`);
     }
 
     // ==================== SENSORS (RELATIVE TO HEADING) ====================
 
-    getCellType(x, y) {
+    getCellType(x: number, y: number): CellType {
         if (x < 0 || x >= this.worldW || y < 0 || y >= this.worldH) return "tierra";
         switch (this.map[y][x]) {
             case this.LAND: return "tierra";
@@ -253,31 +268,22 @@ class GameWorld {
         }
     }
 
-    /**
-     * Convert relative coordinates (forward, right) to world (x, y).
-     * forward > 0 = ahead, right > 0 = starboard.
-     */
-    relativeToWorld(forward, right) {
+    relativeToWorld(forward: number, right: number): [number, number] {
         const dir = this.boat.direction;
-        let wx, wy;
+        let wx = 0, wy = 0;
         switch (dir) {
-            case 0: wx = this.boat.x + right; wy = this.boat.y - forward; break; // N
-            case 1: wx = this.boat.x + forward; wy = this.boat.y + right; break; // E
-            case 2: wx = this.boat.x - right; wy = this.boat.y + forward; break; // S
-            case 3: wx = this.boat.x - forward; wy = this.boat.y - right; break; // W
+            case 0: wx = this.boat.x + right; wy = this.boat.y - forward; break;
+            case 1: wx = this.boat.x + forward; wy = this.boat.y + right; break;
+            case 2: wx = this.boat.x - right; wy = this.boat.y + forward; break;
+            case 3: wx = this.boat.x - forward; wy = this.boat.y - right; break;
         }
         return [wx, wy];
     }
 
-    /**
-     * 5×5 scan matrix RELATIVE to boat heading.
-     * Row 0 = 2 ahead, Row 2 = boat ([2][2]), Row 4 = 2 behind.
-     * Col 0 = 2 port, Col 2 = center, Col 4 = 2 starboard.
-     */
-    scan() {
-        const matrix = [];
+    scan(): string[][] {
+        const matrix: string[][] = [];
         for (let row = 0; row < 5; row++) {
-            const matRow = [];
+            const matRow: string[] = [];
             for (let col = 0; col < 5; col++) {
                 const relForward = 2 - row;
                 const relRight = col - 2;
@@ -289,15 +295,14 @@ class GameWorld {
         return matrix;
     }
 
-    // Single-cell relative sensors
-    sensorForward() { const [x, y] = this.relativeToWorld(1, 0); return this.getCellType(x, y); }
-    sensorRight()   { const [x, y] = this.relativeToWorld(0, 1); return this.getCellType(x, y); }
-    sensorLeft()    { const [x, y] = this.relativeToWorld(0, -1); return this.getCellType(x, y); }
-    sensorBack()    { const [x, y] = this.relativeToWorld(-1, 0); return this.getCellType(x, y); }
+    sensorForward(): CellType { const [x, y] = this.relativeToWorld(1, 0); return this.getCellType(x, y); }
+    sensorRight(): CellType { const [x, y] = this.relativeToWorld(0, 1); return this.getCellType(x, y); }
+    sensorLeft(): CellType { const [x, y] = this.relativeToWorld(0, -1); return this.getCellType(x, y); }
+    sensorBack(): CellType { const [x, y] = this.relativeToWorld(-1, 0); return this.getCellType(x, y); }
 
     // ==================== PORT UTILITIES ====================
 
-    nearestPort() {
+    nearestPort(): number {
         let minDist = Infinity, nearest = 1;
         for (const p of this.ports) {
             const d = Math.abs(p.x - this.boat.x) + Math.abs(p.y - this.boat.y);
@@ -306,24 +311,24 @@ class GameWorld {
         return nearest;
     }
 
-    distanceToPort(n) {
+    distanceToPort(n: number): number {
         const p = this.ports.find(p => p.id === n) || this.ports[0];
         return Math.abs(p.x - this.boat.x) + Math.abs(p.y - this.boat.y);
     }
 
-    portX(n) { return (this.ports.find(p => p.id === n) || this.ports[0]).x; }
-    portY(n) { return (this.ports.find(p => p.id === n) || this.ports[0]).y; }
+    portX(n: number): number { return (this.ports.find(p => p.id === n) || this.ports[0]).x; }
+    portY(n: number): number { return (this.ports.find(p => p.id === n) || this.ports[0]).y; }
 
     // ==================== MOVEMENT ====================
 
-    getDirectionName() { return ['Norte', 'Este', 'Sur', 'Oeste'][this.boat.direction]; }
+    getDirectionName(): string { return ['Norte', 'Este', 'Sur', 'Oeste'][this.boat.direction]; }
 
-    getDirectionDelta(dir) {
+    getDirectionDelta(dir?: number): [number, number] {
         const d = dir !== undefined ? dir : this.boat.direction;
-        return [[0, -1], [1, 0], [0, 1], [-1, 0]][d];
+        return ([[0, -1], [1, 0], [0, 1], [-1, 0]] as [number, number][])[d];
     }
 
-    canMoveTo(x, y) {
+    canMoveTo(x: number, y: number): { ok: boolean; reason?: string } {
         if (x < 0 || x >= this.worldW || y < 0 || y >= this.worldH)
             return { ok: false, reason: '¡Fuera del mundo!' };
         const cell = this.map[y][x];
@@ -334,7 +339,7 @@ class GameWorld {
         return { ok: true };
     }
 
-    collectCargo() {
+    collectCargo(): { ok: boolean; reason?: string } {
         const cell = this.map[this.boat.y][this.boat.x];
         if (cell !== this.FISH) return { ok: false, reason: 'No hay pesca aquí.' };
         if (this.boat.cargo >= this.boat.maxCargo) return { ok: false, reason: 'Bodega llena.' };
@@ -346,13 +351,13 @@ class GameWorld {
         return { ok: true };
     }
 
-    stop() { this.stopped = true; }
+    stop(): void { this.stopped = true; }
 
-    sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+    sleep(ms: number): Promise<void> { return new Promise(resolve => setTimeout(resolve, ms)); }
 
     // ==================== VIEWPORT & RENDERING ====================
 
-    startWaterAnimation() {
+    startWaterAnimation(): void {
         const animate = () => {
             this.waterTime = Date.now() / 3000;
             if (!this.animating) this.render();
@@ -361,12 +366,12 @@ class GameWorld {
         animate();
     }
 
-    getViewport() {
+    getViewport(): { startX: number; startY: number; size: number } {
         const half = Math.floor(this.viewSize / 2);
         return { startX: this.boat.x - half, startY: this.boat.y - half, size: this.viewSize };
     }
 
-    render() {
+    render(): void {
         const ctx = this.ctx;
         const ts = this.tileSize;
         const vp = this.getViewport();
@@ -374,7 +379,6 @@ class GameWorld {
 
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // Draw tiles
         for (let vy = 0; vy < this.viewSize; vy++) {
             for (let vx = 0; vx < this.viewSize; vx++) {
                 const wx = vp.startX + vx;
@@ -408,7 +412,6 @@ class GameWorld {
             }
         }
 
-        // Grid lines
         ctx.strokeStyle = 'rgba(27, 73, 101, 0.18)';
         ctx.lineWidth = 0.5;
         for (let i = 0; i <= this.viewSize; i++) {
@@ -416,36 +419,28 @@ class GameWorld {
             ctx.beginPath(); ctx.moveTo(0, i * ts); ctx.lineTo(canvasUsed, i * ts); ctx.stroke();
         }
 
-        // Fog edge
         if (this.fog) this.drawFogEdge(ctx, ts, vp);
 
-        // Trail
         this.drawTrail(ctx, ts, vp);
-
-        // Port indicators (arrows at edges for off-screen ports)
         this.drawPortIndicators(ctx, ts, vp, canvasUsed);
-
-        // Boat at center
         this.drawBoat(ctx, ts);
-
-        // Compass
         this.drawCompass(ctx, canvasUsed);
     }
 
-    drawLand(ctx, px, py, ts) {
+    drawLand(ctx: CanvasRenderingContext2D, px: number, py: number, ts: number): void {
         ctx.fillStyle = '#2a4a3a';
         ctx.fillRect(px, py, ts, ts);
         ctx.fillStyle = '#3a5c4a';
         ctx.fillRect(px + 2, py + 2, ts - 4, ts - 4);
     }
 
-    drawWaterTile(ctx, px, py, ts, wx, wy) {
+    drawWaterTile(ctx: CanvasRenderingContext2D, px: number, py: number, ts: number, wx: number, wy: number): void {
         const wave = Math.sin(wx * 0.4 + this.waterTime) * Math.cos(wy * 0.3 + this.waterTime * 0.7) * 5;
         ctx.fillStyle = `rgb(10, ${42 + wave}, ${72 + wave * 0.5})`;
         ctx.fillRect(px, py, ts, ts);
     }
 
-    drawPortTile(ctx, px, py, ts) {
+    drawPortTile(ctx: CanvasRenderingContext2D, px: number, py: number, ts: number): void {
         ctx.fillStyle = '#5a4a2a';
         ctx.fillRect(px, py, ts, ts);
         ctx.strokeStyle = '#7a6a4a';
@@ -460,7 +455,7 @@ class GameWorld {
         ctx.fillText('⚓', px + ts / 2, py + ts / 2);
     }
 
-    drawFishOverlay(ctx, px, py, ts) {
+    drawFishOverlay(ctx: CanvasRenderingContext2D, px: number, py: number, ts: number): void {
         ctx.fillStyle = 'rgba(78, 205, 196, 0.2)';
         ctx.fillRect(px + 1, py + 1, ts - 2, ts - 2);
         ctx.font = `${ts * 0.4}px sans-serif`;
@@ -468,7 +463,7 @@ class GameWorld {
         ctx.fillText('🐟', px + ts / 2, py + ts / 2);
     }
 
-    drawReefOverlay(ctx, px, py, ts) {
+    drawReefOverlay(ctx: CanvasRenderingContext2D, px: number, py: number, ts: number): void {
         ctx.fillStyle = 'rgba(92, 64, 42, 0.7)';
         ctx.beginPath();
         ctx.arc(px + ts / 2, py + ts / 2, ts * 0.32, 0, Math.PI * 2);
@@ -481,13 +476,13 @@ class GameWorld {
         ctx.fillText('▲', px + ts / 2, py + ts / 2);
     }
 
-    drawFogEdge(ctx, ts, vp) {
+    drawFogEdge(ctx: CanvasRenderingContext2D, ts: number, vp: { startX: number; startY: number }): void {
         for (let vy = 0; vy < this.viewSize; vy++) {
             for (let vx = 0; vx < this.viewSize; vx++) {
                 const wx = vp.startX + vx, wy = vp.startY + vy;
                 if (wx < 0 || wx >= this.worldW || wy < 0 || wy >= this.worldH) continue;
                 if (this.isRevealed(wx, wy)) {
-                    for (const [dx, dy] of [[0,-1],[0,1],[-1,0],[1,0]]) {
+                    for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
                         if (!this.isRevealed(wx + dx, wy + dy)) {
                             ctx.fillStyle = 'rgba(8, 14, 24, 0.3)';
                             ctx.fillRect(vx * ts, vy * ts, ts, ts);
@@ -499,7 +494,7 @@ class GameWorld {
         }
     }
 
-    drawTrail(ctx, ts, vp) {
+    drawTrail(ctx: CanvasRenderingContext2D, ts: number, vp: { startX: number; startY: number }): void {
         ctx.fillStyle = 'rgba(95, 168, 211, 0.3)';
         for (const t of this.boat.trail) {
             const sx = t.x - vp.startX, sy = t.y - vp.startY;
@@ -511,7 +506,7 @@ class GameWorld {
         }
     }
 
-    drawBoat(ctx, ts) {
+    drawBoat(ctx: CanvasRenderingContext2D, ts: number): void {
         const half = Math.floor(this.viewSize / 2);
         const cx = half * ts + ts / 2;
         const cy = half * ts + ts / 2;
@@ -534,7 +529,7 @@ class GameWorld {
         ctx.restore();
     }
 
-    drawPortIndicators(ctx, ts, vp, canvasUsed) {
+    drawPortIndicators(ctx: CanvasRenderingContext2D, ts: number, vp: { startX: number; startY: number }, canvasUsed: number): void {
         for (const port of this.ports) {
             const sx = port.x - vp.startX, sy = port.y - vp.startY;
             if (sx >= 0 && sx < this.viewSize && sy >= 0 && sy < this.viewSize) {
@@ -563,7 +558,7 @@ class GameWorld {
         }
     }
 
-    drawCompass(ctx, canvasUsed) {
+    drawCompass(ctx: CanvasRenderingContext2D, canvasUsed: number): void {
         const x = canvasUsed - 32, y = 32, r = 16;
         ctx.save();
         ctx.globalAlpha = 0.75;
@@ -579,7 +574,6 @@ class GameWorld {
         ctx.fillText('E', x + r - 3, y);
         ctx.fillText('O', x - r + 3, y);
 
-        // Heading dot
         ctx.fillStyle = '#e76f51';
         const dirAngle = [-Math.PI / 2, 0, Math.PI / 2, Math.PI][this.boat.direction];
         ctx.beginPath();
@@ -588,13 +582,10 @@ class GameWorld {
         ctx.restore();
     }
 
-    /**
-     * Returns sensor grid for the UI panel (5×5 relative to heading).
-     */
-    getSensorGrid() {
-        const grid = [];
+    getSensorGrid(): { type: string }[][] {
+        const grid: { type: string }[][] = [];
         for (let row = 0; row < 5; row++) {
-            const rowData = [];
+            const rowData: { type: string }[] = [];
             for (let col = 0; col < 5; col++) {
                 if (row === 2 && col === 2) { rowData.push({ type: 'boat' }); continue; }
                 const relForward = 2 - row, relRight = col - 2;
