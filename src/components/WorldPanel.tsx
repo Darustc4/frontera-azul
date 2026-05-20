@@ -1,5 +1,6 @@
 import { RefObject } from 'react';
 import { Map, Fuel, Package, Target, Gauge, Anchor, Fish, CheckCircle2, Circle } from 'lucide-react';
+import { useI18n } from '../i18n';
 
 interface WorldPanelProps {
   canvasRef: RefObject<HTMLCanvasElement | null>;
@@ -25,14 +26,15 @@ export function WorldPanel({
   objectives,
 }: WorldPanelProps) {
   const fuelColor = fuelPct < 20 ? 'bg-error' : fuelPct < 40 ? 'bg-warning' : 'bg-success';
+  const { t } = useI18n();
 
   return (
-    <section className="flex-none w-[620px] flex flex-col p-2 bg-bg-tertiary">
+    <section className="flex-none w-155 flex flex-col p-2 bg-bg-tertiary">
       {/* Panel Header */}
       <div className="flex justify-between items-center px-3 py-1.5 bg-bg-panel rounded-t text-xs text-accent font-semibold">
         <span className="flex items-center gap-1.5">
           <Map className="w-3.5 h-3.5" />
-          Carta Náutica
+          {t('world.chart')}
         </span>
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-1 text-xs text-text-dim" title="Velocidad de animación">
@@ -58,14 +60,14 @@ export function WorldPanel({
       <div className="flex items-center gap-4 px-3 py-1.5 bg-bg-panel rounded-b text-xs border-t border-border">
         <div className="flex items-center gap-1.5">
           <Fuel className="w-3.5 h-3.5 text-success" />
-          <span className="text-success min-w-[48px]">{fuelAmount}</span>
+          <span className="text-success min-w-12">{fuelAmount}</span>
           <div className="w-20 h-2 bg-[#0a1118] rounded overflow-hidden border border-border">
             <div className={`fuel-fill h-full rounded ${fuelColor}`} style={{ width: `${fuelPct}%` }} />
           </div>
         </div>
         <span className="text-text-dim flex items-center gap-1">
           <Package className="w-3.5 h-3.5" />
-          Bodega: {cargoText}
+          {t('world.cargo')} {cargoText}
         </span>
         {messageText && (
           <span className="text-warning italic ml-auto flex items-center gap-1">
@@ -80,7 +82,7 @@ export function WorldPanel({
       <div className="mt-1.5 border border-border rounded flex-1 min-h-0 overflow-y-auto">
         <div className="flex items-center gap-1.5 px-2.5 py-1 bg-bg-panel rounded-t text-xs text-accent font-semibold">
           <Target className="w-3.5 h-3.5" />
-          Objetivos
+          {t('world.objectives')}
         </div>
         <ul className="px-2.5 py-1.5 text-sm">
           {objectives.map((obj, i) => (

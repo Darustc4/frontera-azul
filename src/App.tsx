@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { GameWorld } from './game';
-import { PythonExecutor } from './python-executor';
+import { PythonExecutor, GameAction } from './python-executor';
+import { GameEvents } from './events';
 import { MISSIONS, Mission } from './missions';
+import { useI18n } from './i18n';
 import { Header } from './components/Header';
 import { WorldPanel } from './components/WorldPanel';
 import { EditorPanel } from './components/EditorPanel';
@@ -16,9 +18,11 @@ export interface LogEntry {
 }
 
 export default function App() {
+  const { t, locale } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const worldRef = useRef<GameWorld | null>(null);
   const executorRef = useRef<PythonExecutor | null>(null);
+  const eventsRef = useRef<GameEvents>(new GameEvents());
 
   const [currentMissionIdx, setCurrentMissionIdx] = useState(0);
   const [missionStates, setMissionStates] = useState<string[]>(() => {
@@ -71,8 +75,8 @@ export default function App() {
     setCargoText(`${world.boat.cargo}/${world.boat.maxCargo}`);
 
     const cell = world.getCellType(world.boat.x, world.boat.y);
-    if (cell === 'puerto') setMessageText('En puerto');
-    else if (cell === 'pesca') setMessageText('Zona de pesca');
+    if (cell === 'port') setMessageText(t('world.atPort'));
+    else if (cell === 'fish') setMessageText(t('world.fishZone'));
     else setMessageText('');
 
     // Sensor grid
@@ -81,11 +85,11 @@ export default function App() {
 
     const scan = world.scan();
     setSensorInfo(
-      `Adelante: ${scan[1][2]} | Atrás: ${scan[3][2]} | Estribor: ${scan[2][3]} | Babor: ${scan[2][1]}\n` +
+      `${t('sensor.ahead')}: ${scan[1][2]} | ${t('sensor.behind')}: ${scan[3][2]} | ${t('sensor.starboard')}: ${scan[2][3]} | ${t('sensor.port')}: ${scan[2][1]}\n` +
       `Pos: (${world.boat.x}, ${world.boat.y}) | ${world.getDirectionName()} | Fuel: ${world.boat.fuel}\n` +
-      `P${world.nearestPort()} a dist ${world.distanceToPort(world.nearestPort())}`
+      `P${world.nearestPort()} dist ${world.distanceToPort(world.nearestPort())}`
     );
-  }, []);
+  }, [t]);
 
   const setupMissionWorld = useCallback((mission: Mission) => {
     const world = worldRef.current;
@@ -100,8 +104,8 @@ export default function App() {
 
   const renderObjectives = useCallback((missionIdx: number) => {
     const mission = MISSIONS[missionIdx];
-    setObjectives(mission.objectives.map(obj => ({ text: obj.text, completed: false })));
-  }, []);
+    setObjectives(mission.objectives.map(obj => ({ text: t(`mission.${mission.id}.obj.${obj.id}`), completed: false })));
+  }, [t]);
 
   const checkObjectives = useCallback((missionIdx: number, codeStr: string): boolean => {
     const world = worldRef.current;
@@ -111,11 +115,11 @@ export default function App() {
     const results = mission.objectives.map(obj => {
       const passed = obj.check(world.boat, mission.startPos, codeStr, world);
       if (!passed) allComplete = false;
-      return { text: obj.text, completed: passed };
+      return { text: t(`mission.${mission.id}.obj.${obj.id}`), completed: passed };
     });
     setObjectives(results);
     return allComplete;
-  }, []);
+  }, [t]);
 
   const loadMission = useCallback((idx: number) => {
     const mission = MISSIONS[idx];
@@ -133,13 +137,16 @@ export default function App() {
     const canvas = canvasRef.current;
     if (!canvas || worldRef.current) return;
 
+    const events = eventsRef.current;
     const world = new GameWorld(canvas);
     worldRef.current = world;
 
-    const executor = new PythonExecutor(world);
-    executor.onLog = addLog;
-    executor.onStep = () => updateStatus();
+    const executor = new PythonExecutor(world, events);
     executorRef.current = executor;
+
+    // Subscribe to events
+    events.on('log', addLog);
+    events.on('step', () => updateStatus());
 
     // Load first available mission
     const firstAvailable = missionStates.findIndex(s => s === 'current');
@@ -157,6 +164,22 @@ export default function App() {
     executor.ensureLoaded();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Keep executor messages in sync with the active locale
+  useEffect(() => {
+    const executor = executorRef.current;
+    if (!executor) return;
+    executor.messages = {
+      loading: t('executor.loading'),
+      running: t('executor.running'),
+      operationLimit: t('executor.operationLimit'),
+      pythonReady: t('executor.pythonReady'),
+      stopped: t('executor.stopped'),
+      completed: t('executor.completed'),
+      alreadyCollected: t('executor.alreadyCollected'),
+      directions: t('executor.directions').split(','),
+    };
+  }, [locale, t]);
+
   const saveProgress = useCallback((states: string[]) => {
     try { localStorage.setItem('frontera_azul_v2', JSON.stringify(states)); } catch (_e) { /* ignore */ }
   }, []);
@@ -167,7 +190,7 @@ export default function App() {
     if (!world || !executor || world.animating) return;
 
     const trimmedCode = code.trim();
-    if (!trimmedCode) { addLog('[!] Escribe código primero.', 'warning'); return; }
+    if (!trimmedCode) { addLog(t('log.noCode'), 'warning'); return; }
 
     const mission = MISSIONS[currentMissionIdx];
     setupMissionWorld(mission);
@@ -178,7 +201,13 @@ export default function App() {
 
     addLog('─'.repeat(40), 'system');
 
+    // Allow execution to stop early when all objectives are met
+    executor.onCheckObjectives = () => {
+      return mission.objectives.every(obj => obj.check(world.boat, mission.startPos, trimmedCode, world));
+    };
+
     const result = await executor.execute(trimmedCode);
+    executor.onCheckObjectives = null;
 
     if (executor.stopped) {
       world.animating = false;
@@ -190,22 +219,35 @@ export default function App() {
     if (result.actions.length > 0) {
       setupMissionWorld(mission);
       const animSpeed = 550 - speed;
+
+      // Check objectives after each step; stop early if all pass
+      executor.onCheckObjectives = () => {
+        const allDone = mission.objectives.every(obj => obj.check(world.boat, mission.startPos, trimmedCode, world));
+        if (allDone) {
+          const results = mission.objectives.map(obj => ({
+            text: t(`mission.${mission.id}.obj.${obj.id}`),
+            completed: true,
+          }));
+          setObjectives(results);
+        }
+        return allDone;
+      };
+
       await executor.replayActions(result.actions, animSpeed, mission.startPos, mission.startDir, mission.fuel);
+      executor.onCheckObjectives = null;
     }
 
     world.animating = false;
     updateStatus();
     setVariables(executor.getVariables());
 
-    if (result.success || result.actions.length > 0) {
-      const allDone = checkObjectives(currentMissionIdx, trimmedCode);
-      if (allDone) {
-        addLog('[OK] ¡Todos los objetivos cumplidos! Usa "Validar" para completar.', 'success');
-      }
+    const allDone = checkObjectives(currentMissionIdx, trimmedCode);
+    if (allDone) {
+      addLog(t('log.allObjectives'), 'success');
     }
 
     setRunning(false);
-  }, [code, currentMissionIdx, speed, setupMissionWorld, renderObjectives, updateStatus, checkObjectives, addLog]);
+  }, [code, currentMissionIdx, speed, setupMissionWorld, renderObjectives, updateStatus, checkObjectives, addLog, t]);
 
   const validateCode = useCallback(async () => {
     const world = worldRef.current;
@@ -213,36 +255,54 @@ export default function App() {
     if (!world || !executor || world.animating) return;
 
     const trimmedCode = code.trim();
-    if (!trimmedCode) { addLog('[!] Escribe código primero.', 'warning'); return; }
+    if (!trimmedCode) { addLog(t('log.noCode'), 'warning'); return; }
 
     const mission = MISSIONS[currentMissionIdx];
     const RUNS = 10;
     let failures = 0;
+    let firstFailedActions: GameAction[] | null = null;
+    let firstFailedMap: number[][] | null = null;
+    let firstFailedObjectives: string[] = [];
 
     setRunning(true);
     addLog('─'.repeat(40), 'system');
-    addLog(`[~] Validando solución (${RUNS} ejecuciones)...`, 'system');
+    addLog(t('log.validating', { runs: RUNS }), 'system');
 
     for (let run = 0; run < RUNS; run++) {
       if (executor.stopped) break;
 
       setupMissionWorld(mission);
+      const mapSnapshot = world.map.map(row => [...row]);
       executor.silent = true;
       world.animating = true;
+
+      // Stop execution early when all objectives pass
+      executor.onCheckObjectives = () => {
+        return mission.objectives.every(obj => obj.check(world.boat, mission.startPos, trimmedCode, world));
+      };
+
       const result = await executor.execute(trimmedCode);
+      executor.onCheckObjectives = null;
       executor.silent = false;
       world.animating = false;
 
       const allDone = mission.objectives.every(obj => obj.check(world.boat, mission.startPos, trimmedCode, world));
       if (!result.success || !allDone) {
         failures++;
+        if (!firstFailedActions) {
+          firstFailedActions = result.actions;
+          firstFailedMap = mapSnapshot;
+          firstFailedObjectives = mission.objectives
+            .filter(obj => !obj.check(world.boat, mission.startPos, trimmedCode, world))
+            .map(obj => t(`mission.${mission.id}.obj.${obj.id}`));
+        }
       }
     }
 
     if (executor.stopped) {
-      addLog('[x] Validación detenida.', 'warning');
+      addLog(t('log.stopped'), 'warning');
     } else if (failures === 0) {
-      addLog(`[OK] ¡${RUNS}/${RUNS} ejecuciones exitosas! Misión completada.`, 'success');
+      addLog(t('log.validated', { runs: RUNS }), 'success');
       // Complete mission
       const newStates = [...missionStates];
       newStates[currentMissionIdx] = 'completed';
@@ -254,20 +314,32 @@ export default function App() {
       setMissionStates(newStates);
       saveProgress(newStates);
 
-      setSuccessTitle(`¡Misión ${mission.id} Completada!`);
-      setSuccessBody(mission.successMsg);
+      setSuccessTitle(t('success.title', { id: mission.id }));
+      setSuccessBody(t(`mission.${mission.id}.success`));
       const nextIdx = MISSIONS.findIndex((_m, i) => newStates[i] === 'current');
       setHasNextMission(nextIdx >= 0);
       setShowSuccessModal(true);
     } else {
-      addLog(`[ERR] ${failures}/${RUNS} ejecuciones fallidas. Ajusta tu algoritmo.`, 'error');
-      setupMissionWorld(mission);
-      world.render();
+      addLog(t('log.failed', { failures, runs: RUNS }), 'error');
+      firstFailedObjectives.forEach(obj => {
+        addLog(`  ✗ ${obj}`, 'error');
+      });
+      addLog(t('log.replayingFailure'), 'system');
+
+      // Replay the first failed scenario visually
+      if (firstFailedActions && firstFailedMap) {
+        world.map = firstFailedMap;
+        world.animating = true;
+        const animSpeed = 550 - speed;
+        await executor.replayActions(firstFailedActions, animSpeed, mission.startPos, mission.startDir, mission.fuel);
+        world.animating = false;
+        checkObjectives(currentMissionIdx, trimmedCode);
+      }
     }
 
     updateStatus();
     setRunning(false);
-  }, [code, currentMissionIdx, missionStates, setupMissionWorld, updateStatus, addLog, saveProgress]);
+  }, [code, currentMissionIdx, missionStates, speed, setupMissionWorld, updateStatus, checkObjectives, addLog, saveProgress, t]);
 
   const handleStop = useCallback(() => {
     executorRef.current?.stop();
@@ -278,8 +350,8 @@ export default function App() {
     setupMissionWorld(mission);
     updateStatus();
     renderObjectives(currentMissionIdx);
-    addLog('[~] Barco reiniciado.', 'system');
-  }, [currentMissionIdx, setupMissionWorld, updateStatus, renderObjectives, addLog]);
+    addLog(t('log.reset'), 'system');
+  }, [currentMissionIdx, setupMissionWorld, updateStatus, renderObjectives, addLog, t]);
 
   const handleNextMission = useCallback(() => {
     setShowSuccessModal(false);
@@ -297,7 +369,7 @@ export default function App() {
   return (
     <>
       <Header
-        missionLabel={`Misión ${currentMission.id}: ${currentMission.title}`}
+        missionLabel={t('mission.label', { id: currentMission.id, title: t(`mission.${currentMission.id}.title`) })}
         onMissionsClick={() => setShowSidebar(prev => !prev)}
       />
 

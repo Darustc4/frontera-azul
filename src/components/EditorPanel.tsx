@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Play, CheckCircle, Square, RotateCcw, Terminal, Radar, Variable, BookOpen } from 'lucide-react';
+import { useI18n } from '../i18n';
 import type { LogEntry } from '../App';
 
 interface EditorPanelProps {
@@ -32,6 +33,7 @@ export function EditorPanel({
   sensorInfo,
 }: EditorPanelProps) {
   const [activeTab, setActiveTab] = useState<TabId>('console');
+  const { t } = useI18n();
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const consoleRef = useRef<HTMLDivElement>(null);
 
@@ -71,31 +73,31 @@ export function EditorPanel({
     }
   };
 
-  const typeIcons: Record<string, string> = { agua: '~', arrecife: '▲', puerto: 'P', pesca: 'F', boat: 'B', tierra: '▓', fuera: '▓' };
+  const typeIcons: Record<string, string> = { water: '~', reef: '▲', port: 'P', fish: 'F', boat: 'B', land: '▓', fuera: '▓' };
   const typeColors: Record<string, string> = {
-    agua: 'bg-[#0a2a4a]',
-    arrecife: 'bg-[#5c4a3a]',
-    puerto: 'bg-[#4a3a2a]',
-    pesca: 'bg-success/20',
+    water: 'bg-[#0a2a4a]',
+    reef: 'bg-[#5c4a3a]',
+    port: 'bg-[#4a3a2a]',
+    fish: 'bg-success/20',
     boat: 'bg-boat text-white font-bold',
-    tierra: 'bg-[#2a4a3a] text-[#5a7a6a]',
+    land: 'bg-[#2a4a3a] text-[#5a7a6a]',
     fuera: 'bg-[#2a4a3a] text-[#5a7a6a]',
   };
 
   const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
-    { id: 'console', label: 'Consola', icon: <Terminal className="w-3.5 h-3.5" /> },
-    { id: 'sensor', label: 'Sensor', icon: <Radar className="w-3.5 h-3.5" /> },
-    { id: 'variables', label: 'Variables', icon: <Variable className="w-3.5 h-3.5" /> },
-    { id: 'reference', label: 'Referencia', icon: <BookOpen className="w-3.5 h-3.5" /> },
+    { id: 'console', label: t('editor.tab.console'), icon: <Terminal className="w-3.5 h-3.5" /> },
+    { id: 'sensor', label: t('editor.tab.sensor'), icon: <Radar className="w-3.5 h-3.5" /> },
+    { id: 'variables', label: t('editor.tab.variables'), icon: <Variable className="w-3.5 h-3.5" /> },
+    { id: 'reference', label: t('editor.tab.reference'), icon: <BookOpen className="w-3.5 h-3.5" /> },
   ];
 
   return (
-    <section className="flex-1 flex flex-col p-2 pr-2 min-w-[380px]">
+    <section className="flex-1 flex flex-col p-2 pr-2 min-w-95">
       {/* Panel header */}
       <div className="flex justify-between items-center px-3 py-1.5 bg-bg-panel rounded-t text-xs text-accent font-semibold">
         <span className="flex items-center gap-1.5">
           <Terminal className="w-3.5 h-3.5" />
-          Terminal de Programación
+          {t('editor.title')}
         </span>
         <div className="flex gap-1">
           <button
@@ -104,7 +106,7 @@ export function EditorPanel({
             className="flex items-center gap-1 px-2.5 py-1 border border-[#2d8659] rounded bg-[#1a5c3a] text-success text-xs font-semibold hover:bg-[#2d8659] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
           >
             <Play className="w-3 h-3" />
-            {running ? 'Ejecutando...' : 'Probar'}
+            {running ? t('editor.running') : t('editor.run')}
           </button>
           <button
             onClick={onValidate}
@@ -112,7 +114,7 @@ export function EditorPanel({
             className="flex items-center gap-1 px-2.5 py-1 border border-[#2d6b99] rounded bg-[#1a3d5c] text-[#6bc4ff] text-xs font-semibold hover:bg-[#2d6b99] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
           >
             <CheckCircle className="w-3 h-3" />
-            Validar
+            {t('editor.validate')}
           </button>
           <button
             onClick={onStop}
@@ -120,23 +122,23 @@ export function EditorPanel({
             className="flex items-center gap-1 px-2.5 py-1 border border-border rounded bg-bg-panel text-error text-xs hover:bg-border disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
           >
             <Square className="w-3 h-3" />
-            Parar
+            {t('editor.stop')}
           </button>
           <button
             onClick={onReset}
             className="flex items-center gap-1 px-2.5 py-1 border border-border rounded bg-bg-panel text-text text-xs hover:bg-border transition-colors cursor-pointer"
           >
             <RotateCcw className="w-3 h-3" />
-            Reiniciar
+            {t('editor.reset')}
           </button>
         </div>
       </div>
 
       {/* Editor */}
-      <div className="flex-1 flex relative border-2 border-border rounded-b overflow-hidden min-h-[200px]">
+      <div className="flex-1 flex relative border-2 border-border rounded-b overflow-hidden min-h-50">
         <div
           id="line-nums"
-          className="bg-bg-secondary px-1.5 py-2.5 text-right font-mono text-[13px] leading-[1.5] text-text-muted select-none min-w-[36px] border-r border-border overflow-hidden whitespace-pre"
+          className="bg-bg-secondary px-1.5 py-2.5 text-right font-mono text-[13px] leading-normal text-text-muted select-none min-w-9 border-r border-border overflow-hidden whitespace-pre"
         >
           {lineNumbers.map(n => n + '\n').join('')}
         </div>
@@ -155,7 +157,7 @@ export function EditorPanel({
       </div>
 
       {/* Bottom tabs */}
-      <div className="mt-1.5 border-2 border-border rounded min-h-[160px] max-h-[240px] flex flex-col">
+      <div className="mt-1.5 border-2 border-border rounded min-h-40 max-h-60 flex flex-col">
         <div className="flex bg-bg-secondary border-b border-border shrink-0">
           {tabs.map(tab => (
             <button
@@ -163,8 +165,8 @@ export function EditorPanel({
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-1 px-3 py-1.5 border-b-2 text-xs transition-colors cursor-pointer ${
                 activeTab === tab.id
-                  ? 'text-accent border-accent bg-accent/[0.08]'
-                  : 'text-text-muted border-transparent hover:text-text hover:bg-accent/[0.05]'
+                  ? 'text-accent border-accent bg-accent/8'
+                  : 'text-text-muted border-transparent hover:text-text hover:bg-accent/5'
               }`}
             >
               {tab.icon}
@@ -224,35 +226,40 @@ export function EditorPanel({
 }
 
 function ReferenceContent() {
+  const { t } = useI18n();
+  const c = "bg-bg-panel px-1.5 rounded text-success font-mono text-[0.72rem]";
   return (
     <div className="font-sans text-xs leading-relaxed">
-      <RefSection title="Movimiento">
-        <code className="bg-bg-panel px-1.5 rounded text-success font-mono text-[0.72rem]">avanzar(n)</code> — Avanza n casillas hacia donde apunta (1 fuel/casilla)<br />
-        <code className="bg-bg-panel px-1.5 rounded text-success font-mono text-[0.72rem]">girar_derecha()</code> — Gira 90° a estribor (1 fuel)<br />
-        <code className="bg-bg-panel px-1.5 rounded text-success font-mono text-[0.72rem]">girar_izquierda()</code> — Gira 90° a babor (1 fuel)
+      <RefSection title={t('ref.control')}>
+        <code className={c}>control.forward(n)</code> — {t('ref.control.forward')}<br />
+        <code className={c}>control.back(n)</code> — {t('ref.control.back')}<br />
+        <code className={c}>control.turn_right()</code> — {t('ref.control.turnRight')}<br />
+        <code className={c}>control.turn_left()</code> — {t('ref.control.turnLeft')}<br />
+        <code className={c}>control.collect()</code> — {t('ref.control.collect')}
       </RefSection>
-      <RefSection title="Control de Flujo">
-        <code className="bg-bg-panel px-1.5 rounded text-success font-mono text-[0.72rem]">for i in range(n):</code> — Bucle con contador<br />
-        <code className="bg-bg-panel px-1.5 rounded text-success font-mono text-[0.72rem]">while condición:</code> — Bucle condicional<br />
-        <code className="bg-bg-panel px-1.5 rounded text-success font-mono text-[0.72rem]">if condición:</code> — Condicional
+      <RefSection title={t('ref.sensor')}>
+        <code className={c}>sensor.scan()</code> — {t('ref.sensor.scan')}<br />
+        <code className={c}>sensor.forward()</code> — {t('ref.sensor.forward')}<br />
+        <code className={c}>sensor.right()</code> — {t('ref.sensor.right')}<br />
+        <code className={c}>sensor.left()</code> — {t('ref.sensor.left')}<br />
+        <code className={c}>sensor.back()</code> — {t('ref.sensor.back')}
       </RefSection>
-      <RefSection title="Sensores (relativos al rumbo)">
-        <code className="bg-bg-panel px-1.5 rounded text-success font-mono text-[0.72rem]">escanear()</code> — Matriz 5×5 relativa al rumbo<br />
-        <code className="bg-bg-panel px-1.5 rounded text-success font-mono text-[0.72rem]">sensor_adelante()</code> — Lo que hay delante<br />
-        <code className="bg-bg-panel px-1.5 rounded text-success font-mono text-[0.72rem]">sensor_derecha()</code> — Lo que hay a estribor<br />
-        <code className="bg-bg-panel px-1.5 rounded text-success font-mono text-[0.72rem]">sensor_izquierda()</code> — Lo que hay a babor
+      <RefSection title={t('ref.nav')}>
+        <code className={c}>nav.x()</code> <code className={c}>nav.y()</code> — {t('ref.nav.pos')}<br />
+        <code className={c}>nav.heading()</code> — {t('ref.nav.heading')}<br />
+        <code className={c}>nav.heading_num()</code> — {t('ref.nav.headingNum')}<br />
+        <code className={c}>nav.fuel()</code> — {t('ref.nav.fuel')}<br />
+        <code className={c}>nav.cargo()</code> — {t('ref.nav.cargo')}<br />
+        <code className={c}>nav.nearest_port()</code> — {t('ref.nav.nearestPort')}<br />
+        <code className={c}>nav.port_x(n)</code> <code className={c}>nav.port_y(n)</code> — {t('ref.nav.portCoords')}<br />
+        <code className={c}>nav.port_distance(n)</code> — {t('ref.nav.portDistance')}
       </RefSection>
-      <RefSection title="Información">
-        <code className="bg-bg-panel px-1.5 rounded text-success font-mono text-[0.72rem]">posicion_x()</code> <code className="bg-bg-panel px-1.5 rounded text-success font-mono text-[0.72rem]">posicion_y()</code> — Posición absoluta<br />
-        <code className="bg-bg-panel px-1.5 rounded text-success font-mono text-[0.72rem]">rumbo()</code> — Dirección actual<br />
-        <code className="bg-bg-panel px-1.5 rounded text-success font-mono text-[0.72rem]">combustible()</code> — Fuel restante<br />
-        <code className="bg-bg-panel px-1.5 rounded text-success font-mono text-[0.72rem]">carga()</code> — Carga en bodega<br />
-        <code className="bg-bg-panel px-1.5 rounded text-success font-mono text-[0.72rem]">recoger()</code> — Recoge pesca
-      </RefSection>
-      <RefSection title="Puertos">
-        <code className="bg-bg-panel px-1.5 rounded text-success font-mono text-[0.72rem]">puerto_cercano()</code> — ID del más cercano<br />
-        <code className="bg-bg-panel px-1.5 rounded text-success font-mono text-[0.72rem]">puerto_x(n)</code> <code className="bg-bg-panel px-1.5 rounded text-success font-mono text-[0.72rem]">puerto_y(n)</code> — Coords del puerto n<br />
-        <code className="bg-bg-panel px-1.5 rounded text-success font-mono text-[0.72rem]">distancia_puerto(n)</code> — Distancia Manhattan
+      <RefSection title={t('ref.python')}>
+        <code className={c}>for i in range(n):</code> — {t('ref.python.for')}<br />
+        <code className={c}>while condition:</code> — {t('ref.python.while')}<br />
+        <code className={c}>if condition:</code> — {t('ref.python.if')}<br />
+        <code className={c}>def name(params):</code> — {t('ref.python.def')}<br />
+        <code className={c}>print("msg")</code> — {t('ref.python.print')}
       </RefSection>
     </div>
   );

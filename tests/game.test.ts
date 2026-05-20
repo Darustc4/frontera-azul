@@ -103,13 +103,13 @@ describe('GameWorld', () => {
             // Corner is land
             const result = world.canMoveTo(0, 0);
             expect(result.ok).toBe(false);
-            expect(result.reason).toContain('Tierra');
+            expect(result.reason).toContain('Land');
         });
 
         it('blocks move out of bounds', () => {
             const result = world.canMoveTo(-1, 30);
             expect(result.ok).toBe(false);
-            expect(result.reason).toContain('Fuera');
+            expect(result.reason).toContain('Out of bounds');
         });
 
         it('blocks move to reef', () => {
@@ -117,32 +117,32 @@ describe('GameWorld', () => {
             world.map[30][31] = world.REEF;
             const result = world.canMoveTo(31, 30);
             expect(result.ok).toBe(false);
-            expect(result.reason).toContain('Arrecife');
+            expect(result.reason).toContain('Reef');
         });
     });
 
     describe('getCellType', () => {
-        it('returns "tierra" for land', () => {
-            expect(world.getCellType(0, 0)).toBe('tierra');
+        it('returns "land" for land', () => {
+            expect(world.getCellType(0, 0)).toBe('land');
         });
-        it('returns "agua" for water', () => {
-            expect(world.getCellType(30, 30)).toBe('agua');
+        it('returns "water" for water', () => {
+            expect(world.getCellType(30, 30)).toBe('water');
         });
-        it('returns "tierra" for out of bounds', () => {
-            expect(world.getCellType(-1, 0)).toBe('tierra');
-            expect(world.getCellType(100, 100)).toBe('tierra');
+        it('returns "land" for out of bounds', () => {
+            expect(world.getCellType(-1, 0)).toBe('land');
+            expect(world.getCellType(100, 100)).toBe('land');
         });
-        it('returns "arrecife" for reef', () => {
+        it('returns "reef" for reef', () => {
             world.map[30][31] = world.REEF;
-            expect(world.getCellType(31, 30)).toBe('arrecife');
+            expect(world.getCellType(31, 30)).toBe('reef');
         });
-        it('returns "pesca" for fish', () => {
+        it('returns "fish" for fish', () => {
             world.map[30][31] = world.FISH;
-            expect(world.getCellType(31, 30)).toBe('pesca');
+            expect(world.getCellType(31, 30)).toBe('fish');
         });
-        it('returns "puerto" for port', () => {
+        it('returns "port" for port', () => {
             const port = world.ports[0];
-            expect(world.getCellType(port.x, port.y)).toBe('puerto');
+            expect(world.getCellType(port.x, port.y)).toBe('port');
         });
     });
 
@@ -193,7 +193,7 @@ describe('GameWorld', () => {
             world.boat.y = 30;
             world.boat.direction = 0;
             const matrix = world.scan();
-            expect(matrix[2][2]).toBe('agua');
+            expect(matrix[2][2]).toBe('water');
         });
 
         it('detects reef at relative position', () => {
@@ -204,7 +204,7 @@ describe('GameWorld', () => {
             world.map[29][30] = world.REEF;
             const matrix = world.scan();
             // [1][2] is 1 cell ahead
-            expect(matrix[1][2]).toBe('arrecife');
+            expect(matrix[1][2]).toBe('reef');
         });
     });
 
@@ -217,22 +217,22 @@ describe('GameWorld', () => {
 
         it('sensorForward detects cell ahead', () => {
             world.map[30][31] = world.REEF;
-            expect(world.sensorForward()).toBe('arrecife');
+            expect(world.sensorForward()).toBe('reef');
         });
 
         it('sensorRight detects cell to starboard', () => {
             world.map[31][30] = world.FISH;
-            expect(world.sensorRight()).toBe('pesca');
+            expect(world.sensorRight()).toBe('fish');
         });
 
         it('sensorLeft detects cell to port', () => {
             world.map[29][30] = world.REEF;
-            expect(world.sensorLeft()).toBe('arrecife');
+            expect(world.sensorLeft()).toBe('reef');
         });
 
         it('sensorBack detects cell behind', () => {
             world.map[30][29] = world.REEF;
-            expect(world.sensorBack()).toBe('arrecife');
+            expect(world.sensorBack()).toBe('reef');
         });
     });
 

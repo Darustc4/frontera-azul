@@ -24,7 +24,7 @@ export interface BoatState {
     collectedZones: Set<string>;
 }
 
-export type CellType = 'tierra' | 'agua' | 'puerto' | 'pesca' | 'arrecife';
+export type CellType = 'land' | 'water' | 'port' | 'fish' | 'reef';
 
 export class GameWorld {
     canvas: HTMLCanvasElement;
@@ -257,14 +257,14 @@ export class GameWorld {
     // ==================== SENSORS (RELATIVE TO HEADING) ====================
 
     getCellType(x: number, y: number): CellType {
-        if (x < 0 || x >= this.worldW || y < 0 || y >= this.worldH) return "tierra";
+        if (x < 0 || x >= this.worldW || y < 0 || y >= this.worldH) return "land";
         switch (this.map[y][x]) {
-            case this.LAND: return "tierra";
-            case this.WATER: return "agua";
-            case this.PORT: return "puerto";
-            case this.FISH: return "pesca";
-            case this.REEF: return "arrecife";
-            default: return "agua";
+            case this.LAND: return "land";
+            case this.WATER: return "water";
+            case this.PORT: return "port";
+            case this.FISH: return "fish";
+            case this.REEF: return "reef";
+            default: return "water";
         }
     }
 
@@ -330,21 +330,21 @@ export class GameWorld {
 
     canMoveTo(x: number, y: number): { ok: boolean; reason?: string } {
         if (x < 0 || x >= this.worldW || y < 0 || y >= this.worldH)
-            return { ok: false, reason: '¡Fuera del mundo!' };
+            return { ok: false, reason: 'Out of bounds!' };
         const cell = this.map[y][x];
         if (cell === this.LAND)
-            return { ok: false, reason: `¡Tierra en (${x},${y})! No puedes navegar sobre tierra.` };
+            return { ok: false, reason: `Land at (${x},${y})! You can't sail over land.` };
         if (cell === this.REEF)
-            return { ok: false, reason: `¡Arrecife en (${x},${y})! Necesitas esquivarlo.` };
+            return { ok: false, reason: `Reef at (${x},${y})! You need to avoid it.` };
         return { ok: true };
     }
 
     collectCargo(): { ok: boolean; reason?: string } {
         const cell = this.map[this.boat.y][this.boat.x];
-        if (cell !== this.FISH) return { ok: false, reason: 'No hay pesca aquí.' };
-        if (this.boat.cargo >= this.boat.maxCargo) return { ok: false, reason: 'Bodega llena.' };
+        if (cell !== this.FISH) return { ok: false, reason: 'No fish here.' };
+        if (this.boat.cargo >= this.boat.maxCargo) return { ok: false, reason: 'Cargo hold full.' };
         const key = `${this.boat.x},${this.boat.y}`;
-        if (this.boat.collectedZones.has(key)) return { ok: false, reason: 'Ya recogiste aquí.' };
+        if (this.boat.collectedZones.has(key)) return { ok: false, reason: 'Already collected here.' };
         this.boat.cargo++;
         this.boat.collectedZones.add(key);
         this.map[this.boat.y][this.boat.x] = this.WATER;

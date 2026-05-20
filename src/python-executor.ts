@@ -5,6 +5,7 @@
  */
 
 import { GameWorld } from './game';
+import { GameEvents } from './events';
 
 const PYODIDE_CDN = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.mjs';
 
@@ -24,23 +25,31 @@ interface PyodideInterface {
 export class PythonExecutor {
     private pyodide: PyodideInterface | null = null;
     private world: GameWorld;
-    private consoleEl: HTMLElement | null;
     private loadingPromise: Promise<void> | null = null;
 
-    public onLog: ((message: string, type: string) => void) | null = null;
-    public onStep: (() => void) | null = null;
+    public events: GameEvents;
     public onCheckObjectives: (() => boolean) | null = null;
     public stopped = false;
     public silent = false;
+    public messages = {
+        loading: 'Loading Python (first time, ~10s)...',
+        running: '▶ Running program...',
+        operationLimit: 'Program exceeds operation limit',
+        pythonReady: '✓ Python ready.',
+        stopped: '⏹ Execution stopped.',
+        completed: '✓ Completed. {actions} actions, Pos: ({x}, {y})',
+        alreadyCollected: 'Already collected here.',
+        directions: ['North', 'East', 'South', 'West'],
+    };
 
     private actions: GameAction[] = [];
     private executionError = false;
     private consoleMessages: { message: string; type: string }[] = [];
     private userVariables: Record<string, any> = {};
 
-    constructor(world: GameWorld, consoleEl?: HTMLElement | null) {
+    constructor(world: GameWorld, events: GameEvents) {
         this.world = world;
-        this.consoleEl = consoleEl || null;
+        this.events = events;
     }
 
     // ==================== LOGGING ====================
@@ -50,22 +59,10 @@ export class PythonExecutor {
             this.consoleMessages.push({ message, type });
             return;
         }
-        if (this.onLog) {
-            this.onLog(message, type);
-            return;
-        }
-        if (this.consoleEl) {
-            const line = document.createElement('div');
-            line.className = `log-${type}`;
-            line.textContent = message;
-            this.consoleEl.appendChild(line);
-            this.consoleEl.scrollTop = this.consoleEl.scrollHeight;
-        }
+        this.events.emit('log', message, type);
     }
 
-    clearConsole(): void {
-        if (this.consoleEl) this.consoleEl.innerHTML = '';
-    }
+    clearConsole(): void {}
 
     getVariables(): Record<string, any> { return { ...this.userVariables }; }
 
@@ -82,7 +79,7 @@ export class PythonExecutor {
     }
 
     private async _loadPyodide(): Promise<void> {
-        this.log('🐍 Cargando Python (primera vez, ~10s)...', 'system');
+        this.log(this.messages.loading, 'system');
 
         let loadPyodide: any;
         if (typeof window !== 'undefined') {
@@ -102,7 +99,7 @@ export class PythonExecutor {
 
         // Set up the game API in Python
         await this._setupGameAPI();
-        this.log('✓ Python listo.', 'success');
+        this.log(this.messages.pythonReady, 'success');
     }
 
     private async _setupGameAPI(): Promise<void> {
@@ -152,149 +149,190 @@ class _GameBridge:
         self._direction_name = None
         self._get_direction_delta = None
         self._reveal_around = None
+        self._check_objectives_fn = None
 
     def check_step(self):
         self.step_count += 1
         if self.step_count > self.max_steps:
-            raise RuntimeError(f"Programa excede {self.max_steps} operaciones (posible bucle infinito)")
+            raise RuntimeError(f"Program exceeds {self.max_steps} operations (possible infinite loop)")
         if self.stopped:
-            raise KeyboardInterrupt("Ejecución detenida por el usuario")
+            raise KeyboardInterrupt("Execution stopped by user")
+
+    def check_objectives(self):
+        if self._check_objectives_fn and self._check_objectives_fn():
+            raise KeyboardInterrupt("_OBJECTIVES_COMPLETE_")
 
 _bridge = _GameBridge()
 
 # ============================================================
-# Public API - these are the functions students use
+# Public API - boat-centric objects students use
 # ============================================================
 
-def avanzar(n=1):
-    """Move forward n cells in current heading direction."""
-    n = int(n)
-    if n < 0:
-        raise ValueError("avanzar() necesita un número positivo")
-    for _ in range(n):
+class _Control:
+    """Movement and action commands for the boat."""
+
+    def forward(self, n=1):
+        """Move forward n cells in current heading direction."""
+        n = int(n)
+        if n < 0:
+            raise ValueError("forward() requires a positive number")
+        for _ in range(n):
+            _bridge.check_step()
+            if _bridge.boat_fuel <= 0:
+                _bridge.error = "Out of fuel!"
+                raise RuntimeError("Out of fuel! Adrift.")
+            dx, dy = _bridge._get_direction_delta(_bridge.boat_dir)
+            new_x = _bridge.boat_x + dx
+            new_y = _bridge.boat_y + dy
+            result = _bridge._can_move(new_x, new_y)
+            if not result.ok:
+                _bridge.error = result.reason
+                raise RuntimeError(result.reason)
+            _bridge.trail.append((_bridge.boat_x, _bridge.boat_y))
+            from_x, from_y = _bridge.boat_x, _bridge.boat_y
+            _bridge.boat_x = new_x
+            _bridge.boat_y = new_y
+            _bridge.boat_fuel -= 1
+            _bridge._reveal_around(new_x, new_y)
+            _bridge.actions.append({
+                'type': 'advance',
+                'fromX': from_x, 'fromY': from_y,
+                'toX': new_x, 'toY': new_y
+            })
+            _bridge.check_objectives()
+
+    def back(self, n=1):
+        """Turn 180, move forward n cells, turn 180 again."""
         _bridge.check_step()
         if _bridge.boat_fuel <= 0:
-            _bridge.error = "¡Sin combustible!"
-            raise RuntimeError("¡Sin combustible! A la deriva.")
-        dx, dy = _bridge._get_direction_delta(_bridge.boat_dir)
-        new_x = _bridge.boat_x + dx
-        new_y = _bridge.boat_y + dy
-        result = _bridge._can_move(new_x, new_y)
-        if not result.ok:
-            _bridge.error = result.reason
-            raise RuntimeError(result.reason)
-        _bridge.trail.append((_bridge.boat_x, _bridge.boat_y))
-        from_x, from_y = _bridge.boat_x, _bridge.boat_y
-        _bridge.boat_x = new_x
-        _bridge.boat_y = new_y
+            _bridge.error = "Out of fuel!"
+            raise RuntimeError("Out of fuel!")
         _bridge.boat_fuel -= 1
-        _bridge._reveal_around(new_x, new_y)
-        _bridge.actions.append({
-            'type': 'advance',
-            'fromX': from_x, 'fromY': from_y,
-            'toX': new_x, 'toY': new_y
-        })
+        _bridge.boat_dir = (_bridge.boat_dir + 2) % 4
+        _bridge.actions.append({'type': 'turn_right', 'newDir': (_bridge.boat_dir + 3) % 4})
+        _bridge.actions.append({'type': 'turn_right', 'newDir': _bridge.boat_dir})
+        self.forward(n)
+        _bridge.check_step()
+        if _bridge.boat_fuel <= 0:
+            _bridge.error = "Out of fuel!"
+            raise RuntimeError("Out of fuel!")
+        _bridge.boat_fuel -= 1
+        _bridge.boat_dir = (_bridge.boat_dir + 2) % 4
+        _bridge.actions.append({'type': 'turn_left', 'newDir': (_bridge.boat_dir + 1) % 4})
+        _bridge.actions.append({'type': 'turn_left', 'newDir': _bridge.boat_dir})
 
-def girar_derecha():
-    """Turn 90 degrees starboard."""
-    _bridge.check_step()
-    if _bridge.boat_fuel <= 0:
-        _bridge.error = "¡Sin combustible para girar!"
-        raise RuntimeError("¡Sin combustible para girar!")
-    _bridge.boat_fuel -= 1
-    _bridge.boat_dir = (_bridge.boat_dir + 1) % 4
-    _bridge.actions.append({'type': 'turn_right', 'newDir': _bridge.boat_dir})
+    def turn_right(self):
+        """Turn 90 degrees starboard."""
+        _bridge.check_step()
+        if _bridge.boat_fuel <= 0:
+            _bridge.error = "Out of fuel to turn!"
+            raise RuntimeError("Out of fuel to turn!")
+        _bridge.boat_fuel -= 1
+        _bridge.boat_dir = (_bridge.boat_dir + 1) % 4
+        _bridge.actions.append({'type': 'turn_right', 'newDir': _bridge.boat_dir})
 
-def girar_izquierda():
-    """Turn 90 degrees port."""
-    _bridge.check_step()
-    if _bridge.boat_fuel <= 0:
-        _bridge.error = "¡Sin combustible para girar!"
-        raise RuntimeError("¡Sin combustible para girar!")
-    _bridge.boat_fuel -= 1
-    _bridge.boat_dir = (_bridge.boat_dir + 3) % 4
-    _bridge.actions.append({'type': 'turn_left', 'newDir': _bridge.boat_dir})
+    def turn_left(self):
+        """Turn 90 degrees port."""
+        _bridge.check_step()
+        if _bridge.boat_fuel <= 0:
+            _bridge.error = "Out of fuel to turn!"
+            raise RuntimeError("Out of fuel to turn!")
+        _bridge.boat_fuel -= 1
+        _bridge.boat_dir = (_bridge.boat_dir + 3) % 4
+        _bridge.actions.append({'type': 'turn_left', 'newDir': _bridge.boat_dir})
 
-def recoger():
-    """Collect cargo at current position."""
-    _bridge.check_step()
-    result = _bridge._collect_cargo(_bridge.boat_x, _bridge.boat_y, _bridge.boat_cargo, _bridge.boat_max_cargo, _bridge.collected_zones)
-    if not result.ok:
-        raise RuntimeError(result.reason)
-    _bridge.boat_cargo += 1
-    _bridge.collected_zones.add(f"{_bridge.boat_x},{_bridge.boat_y}")
-    _bridge.actions.append({'type': 'collect', 'x': _bridge.boat_x, 'y': _bridge.boat_y})
+    def collect(self):
+        """Collect cargo at current position."""
+        _bridge.check_step()
+        result = _bridge._collect_cargo(_bridge.boat_x, _bridge.boat_y, _bridge.boat_cargo, _bridge.boat_max_cargo, _bridge.collected_zones)
+        if not result.ok:
+            raise RuntimeError(result.reason)
+        _bridge.boat_cargo += 1
+        _bridge.collected_zones.add(f"{_bridge.boat_x},{_bridge.boat_y}")
+        _bridge.actions.append({'type': 'collect', 'x': _bridge.boat_x, 'y': _bridge.boat_y})
+        _bridge.check_objectives()
 
-def escanear():
-    """Return 5x5 scan matrix relative to boat heading."""
-    _bridge.check_step()
-    return _bridge._scan(_bridge.boat_x, _bridge.boat_y, _bridge.boat_dir)
+class _Sensor:
+    """Sensing capabilities of the boat."""
 
-def sensor_adelante():
-    """What's in front of the boat."""
-    _bridge.check_step()
-    return _bridge._sensor_forward(_bridge.boat_x, _bridge.boat_y, _bridge.boat_dir)
+    def scan(self):
+        """Return 5x5 scan matrix relative to boat heading."""
+        _bridge.check_step()
+        return _bridge._scan(_bridge.boat_x, _bridge.boat_y, _bridge.boat_dir)
 
-def sensor_derecha():
-    """What's to starboard."""
-    _bridge.check_step()
-    return _bridge._sensor_right(_bridge.boat_x, _bridge.boat_y, _bridge.boat_dir)
+    def forward(self):
+        """What's in front of the boat."""
+        _bridge.check_step()
+        return _bridge._sensor_forward(_bridge.boat_x, _bridge.boat_y, _bridge.boat_dir)
 
-def sensor_izquierda():
-    """What's to port."""
-    _bridge.check_step()
-    return _bridge._sensor_left(_bridge.boat_x, _bridge.boat_y, _bridge.boat_dir)
+    def right(self):
+        """What's to starboard."""
+        _bridge.check_step()
+        return _bridge._sensor_right(_bridge.boat_x, _bridge.boat_y, _bridge.boat_dir)
 
-def sensor_atras():
-    """What's behind the boat."""
-    _bridge.check_step()
-    return _bridge._sensor_back(_bridge.boat_x, _bridge.boat_y, _bridge.boat_dir)
+    def left(self):
+        """What's to port."""
+        _bridge.check_step()
+        return _bridge._sensor_left(_bridge.boat_x, _bridge.boat_y, _bridge.boat_dir)
 
-def posicion_x():
-    """Current X position."""
-    return _bridge.boat_x
+    def back(self):
+        """What's behind the boat."""
+        _bridge.check_step()
+        return _bridge._sensor_back(_bridge.boat_x, _bridge.boat_y, _bridge.boat_dir)
 
-def posicion_y():
-    """Current Y position."""
-    return _bridge.boat_y
+class _Nav:
+    """Navigation and status information."""
 
-def rumbo():
-    """Current heading as string."""
-    return _bridge._direction_name(_bridge.boat_dir)
+    def x(self):
+        """Current X position."""
+        return _bridge.boat_x
 
-def rumbo_num():
-    """Current heading as number (0=N, 1=E, 2=S, 3=W)."""
-    return _bridge.boat_dir
+    def y(self):
+        """Current Y position."""
+        return _bridge.boat_y
 
-def combustible():
-    """Remaining fuel."""
-    return _bridge.boat_fuel
+    def heading(self):
+        """Current heading as string."""
+        return _bridge._direction_name(_bridge.boat_dir)
 
-def carga():
-    """Current cargo count."""
-    return _bridge.boat_cargo
+    def heading_num(self):
+        """Current heading as number (0=N, 1=E, 2=S, 3=W)."""
+        return _bridge.boat_dir
 
-def puerto_cercano():
-    """ID of nearest port (1 or 2)."""
-    return _bridge._nearest_port(_bridge.boat_x, _bridge.boat_y)
+    def fuel(self):
+        """Remaining fuel."""
+        return _bridge.boat_fuel
 
-def puerto_x(n=None):
-    """X coordinate of port n."""
-    if n is None:
-        n = puerto_cercano()
-    return _bridge._port_x(int(n))
+    def cargo(self):
+        """Current cargo count."""
+        return _bridge.boat_cargo
 
-def puerto_y(n=None):
-    """Y coordinate of port n."""
-    if n is None:
-        n = puerto_cercano()
-    return _bridge._port_y(int(n))
+    def nearest_port(self):
+        """ID of nearest port (1 or 2)."""
+        return _bridge._nearest_port(_bridge.boat_x, _bridge.boat_y)
 
-def distancia_puerto(n=None):
-    """Manhattan distance to port n."""
-    if n is None:
-        n = puerto_cercano()
-    return _bridge._distance_to_port(int(n), _bridge.boat_x, _bridge.boat_y)
+    def port_x(self, n=None):
+        """X coordinate of port n."""
+        if n is None:
+            n = self.nearest_port()
+        return _bridge._port_x(int(n))
+
+    def port_y(self, n=None):
+        """Y coordinate of port n."""
+        if n is None:
+            n = self.nearest_port()
+        return _bridge._port_y(int(n))
+
+    def port_distance(self, n=None):
+        """Manhattan distance to port n."""
+        if n is None:
+            n = self.nearest_port()
+        return _bridge._distance_to_port(int(n), _bridge.boat_x, _bridge.boat_y)
+
+# Instantiate the API objects
+control = _Control()
+sensor = _Sensor()
+nav = _Nav()
 `);
     }
 
@@ -329,7 +367,7 @@ def distancia_puerto(n=None):
         }
 
         // Execute student code
-        this.log('▶ Ejecutando programa...', 'system');
+        this.log(this.messages.running, 'system');
 
         try {
             // Add trace for step limiting and wrap in function to capture locals
@@ -345,7 +383,7 @@ _trace_counter = [0]
 def _trace_fn(frame, event, arg):
     _trace_counter[0] += 1
     if _trace_counter[0] > 200000:
-        raise RuntimeError("Programa excede el límite de operaciones")
+        raise RuntimeError("${this.messages.operationLimit}")
     if _bridge.stopped:
         raise KeyboardInterrupt("Detenido")
     return _trace_fn
@@ -371,7 +409,7 @@ finally:
             this._syncStateFromPython();
 
             if (this.stopped) {
-                this.log('⏹ Ejecución detenida.', 'warning');
+                this.log(this.messages.stopped, 'warning');
                 return { success: false, actions: this.actions };
             }
 
@@ -382,7 +420,7 @@ finally:
             }
 
             if (this.actions.length > 0) {
-                this.log(`✓ Completado. ${this.actions.length} acciones, Pos: (${bridge.boat_x}, ${bridge.boat_y})`, 'success');
+                this.log(this.messages.completed.replace('{actions}', String(this.actions.length)).replace('{x}', String(bridge.boat_x)).replace('{y}', String(bridge.boat_y)), 'success');
             }
             return { success: true, actions: this.actions };
 
@@ -437,13 +475,13 @@ finally:
 
         bridge._collect_cargo = (x: number, y: number, cargo: number, maxCargo: number, collectedZones: any) => {
             const cell = world.map[y][x];
-            if (cell !== world.FISH) return { ok: false, reason: 'No hay pesca aquí.' };
-            if (cargo >= maxCargo) return { ok: false, reason: 'Bodega llena.' };
+            if (cell !== world.FISH) return { ok: false, reason: 'No fish here.' };
+            if (cargo >= maxCargo) return { ok: false, reason: 'Cargo hold full.' };
             const key = `${x},${y}`;
             // Check the Python set
             let alreadyCollected = false;
             try { alreadyCollected = collectedZones.has(key); } catch (_e) { /* */ }
-            if (alreadyCollected) return { ok: false, reason: 'Ya recogiste aquí.' };
+            if (alreadyCollected) return { ok: false, reason: this.messages.alreadyCollected };
             // Update the actual map
             world.map[y][x] = world.WATER;
             return { ok: true };
@@ -511,8 +549,23 @@ finally:
         };
 
         bridge._direction_name = (dir: number): string => {
-            return ['Norte', 'Este', 'Sur', 'Oeste'][dir];
+            return this.messages.directions[dir];
         };
+
+        // Objective checking callback - syncs bridge state to world.boat before checking
+        bridge._check_objectives_fn = this.onCheckObjectives ? () => {
+            const boat = this.world.boat;
+            boat.x = bridge.boat_x;
+            boat.y = bridge.boat_y;
+            boat.direction = bridge.boat_dir;
+            boat.fuel = bridge.boat_fuel;
+            boat.cargo = bridge.boat_cargo;
+            boat.trail = Array.from({ length: bridge.trail.length }, (_, i) => {
+                const t = bridge.trail[i];
+                return { x: t[0], y: t[1] };
+            });
+            return this.onCheckObjectives!();
+        } : null;
     }
 
     private _syncStateFromPython(): void {
@@ -634,7 +687,7 @@ finally:
                         } else if (type === 'int' || type === 'float' || type === 'str' || type === 'bool') {
                             this.userVariables[name] = val.toString();
                         } else if (type === 'function') {
-                            this.userVariables[name] = `<función>`;
+                            this.userVariables[name] = `<function>`;
                         } else {
                             this.userVariables[name] = `<${type}>`;
                         }
@@ -709,7 +762,8 @@ finally:
             }
 
             this.world.render();
-            if (this.onStep) this.onStep();
+            this.events.emit('step');
+            if (this.onCheckObjectives && this.onCheckObjectives()) break;
             await this.world.sleep(speed);
         }
     }
